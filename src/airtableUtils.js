@@ -1,11 +1,9 @@
 const Airtable = require("airtable");
-require("dotenv").config();
 
-const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(
-  "appQsBhe43rrhfa6S",
-);
-
-async function getAgendaFromAirtable() {
+async function getAgendaFromAirtable(context) {
+  const base = new Airtable({ apiKey: context.env.AIRTABLE_API_KEY }).base(
+    "appQsBhe43rrhfa6S",
+  );
   return new Promise((resolve, reject) => {
     base("Agenda")
       .select({
@@ -21,18 +19,10 @@ async function getAgendaFromAirtable() {
   });
 }
 
-async function updateAgendaInAirtable(newAgenda) {
-  return new Promise((resolve, reject) => {
-    base("Agenda").update(newAgenda, function (err, records) {
-      if (err) {
-        return reject(err);
-      }
-      resolve(records);
-    });
-  });
-}
-
-async function getAlertsFromAirtable() {
+async function getAlertsFromAirtable(context) {
+  const base = new Airtable({ apiKey: context.env.AIRTABLE_API_KEY }).base(
+    "appQsBhe43rrhfa6S",
+  );
   return new Promise((resolve, reject) => {
     base("Alerts")
       .select({
@@ -48,20 +38,7 @@ async function getAlertsFromAirtable() {
   });
 }
 
-async function updateAlertsInAirtable(newAlerts) {
-  return new Promise((resolve, reject) => {
-    base("Alerts").update(newAlerts, function (err, records) {
-      if (err) {
-        return reject(err);
-      }
-      resolve(records);
-    });
-  });
-}
-
 module.exports = {
   getAgendaFromAirtable,
-  updateAgendaInAirtable,
   getAlertsFromAirtable,
-  updateAlertsInAirtable,
 };

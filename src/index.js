@@ -69,7 +69,6 @@ app.post("/update-agenda", async (context) => {
         gas: "30000000000000",
         attachedDeposit: "0",
       });
-      await updateAgendaInAirtable(newAgenda); // Update Airtable as well
       return context.json({ message: "Agenda updated successfully" }, 200);
     } else {
       return context.json({ message: "No changes to the agenda" }, 200);
@@ -104,7 +103,6 @@ app.post("/update-alert", async (context) => {
         gas: "30000000000000",
         attachedDeposit: "0",
       });
-      await updateAlertsInAirtable(newAlerts); // Update Airtable as well
       return context.json({ message: "Alerts updated successfully" }, 200);
     } else {
       return context.json({ message: "No changes to the alerts" }, 200);
