@@ -38,7 +38,27 @@ async function getAlertsFromAirtable(context) {
   });
 }
 
+// Verify HMAC signature
+function verifyHMAC(request, macSecretBase64) {
+  try {
+    const macSecretDecoded = Buffer.from(macSecretBase64, "base64");
+    const body = request.clone().text(); // Clone the request to read it twice
+    const hmac = crypto.createHmac("sha256", macSecretDecoded);
+    hmac.update(body, "utf8");
+    const expectedHMAC = "hmac-sha256=" + hmac.digest("hex");
+    const receivedHMAC = request.headers.get("X-Airtable-Content-MAC");
+
+    if (expectedHMAC !== receivedHMAC) {
+      throw new Error("HMAC verification failed.");
+    }
+  } catch (error) {
+    console.error("Error verifying HMAC:", error);
+    throw new Error("HMAC verification failed.");
+  }
+}
+
 module.exports = {
+  verifyHMAC,
   getAgendaFromAirtable,
   getAlertsFromAirtable,
 };
