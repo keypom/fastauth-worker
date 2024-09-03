@@ -54,10 +54,12 @@ async function verifyHMAC(request, macSecretBase64) {
   try {
     console.log("Starting HMAC verification...");
     const macSecretDecoded = Buffer.from(macSecretBase64, "base64");
-    const body = await request.text(); // Read the body as a string
-    console.log("Request body for HMAC verification:", body);
-    const hmac = crypto.createHmac("sha256", macSecretDecoded);
-    hmac.update(body, "utf8");
+    const body = Buffer.from(
+      JSON.stringify(webhookNotificationDeliveryPayload),
+      "utf8",
+    );
+    const hmac = require("crypto").createHmac("sha256", macSecretDecoded);
+    hmac.update(body.toString(), "ascii");
     const expectedHMAC = "hmac-sha256=" + hmac.digest("hex");
     const receivedHMAC = request.headers.get("X-Airtable-Content-MAC");
     console.log("Expected HMAC:", expectedHMAC);
