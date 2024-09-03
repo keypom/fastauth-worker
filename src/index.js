@@ -5,9 +5,7 @@ const { Near } = require("@near-js/wallet-account");
 const { InMemoryKeyStore } = require("@near-js/keystores");
 const {
   getAgendaFromAirtable,
-  updateAgendaInAirtable,
   getAlertsFromAirtable,
-  updateAlertsInAirtable,
 } = require("./airtableUtils");
 const app = new Hono();
 import { cors } from "hono/cors";
@@ -51,14 +49,14 @@ app.post("/update-agenda", async (context) => {
     const workerAccount = await setupNear(context);
     const factoryAccountId = context.env.FACTORY_ACCOUNT_ID;
 
+    // Get new agenda from Airtable
+    const newAgenda = await getAgendaFromAirtable();
+
     // Get current agenda from NEAR
     const currentAgenda = await workerAccount.viewFunction({
       contractId: factoryAccountId,
       methodName: "get_agenda",
     });
-
-    // Get new agenda from Airtable
-    const newAgenda = await getAgendaFromAirtable();
 
     // Compare and update if necessary
     if (JSON.stringify(newAgenda) !== JSON.stringify(currentAgenda)) {

@@ -14,7 +14,8 @@ FIREWALL="FALSE"
 [env.dev]
 [env.dev.vars]
 ENVIRONMENT="development"
-WORKER_URL='https://stripe-worker-production.keypom.workers.dev'
 NETWORK='testnet'
-WORKER_ACCOUNT_ID='cf-worker.redacted.testnet'
+WORKER_ACCOUNT_ID='worker.1725049501291-factory.testnet'
 FIREWALL="FALSE"
+FACTORY_CONTRACT_ID='1725049501291-factory.testnet'
+AIRTABLE_BASE_ID='appQsBhe43rrhfa6S'

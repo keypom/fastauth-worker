@@ -1,9 +1,9 @@
 const Airtable = require("airtable");
 
 async function getAgendaFromAirtable(context) {
-  const base = new Airtable({ apiKey: context.env.AIRTABLE_API_KEY }).base(
-    "appQsBhe43rrhfa6S",
-  );
+  const base = new Airtable({
+    apiKey: context.env.AIRTABLE_PESONAL_ACCESS_TOKEN,
+  }).base(context.env.AIRTABLE_BASE_ID);
   return new Promise((resolve, reject) => {
     base("Agenda")
       .select({
@@ -20,9 +20,9 @@ async function getAgendaFromAirtable(context) {
 }
 
 async function getAlertsFromAirtable(context) {
-  const base = new Airtable({ apiKey: context.env.AIRTABLE_API_KEY }).base(
-    "appQsBhe43rrhfa6S",
-  );
+  const base = new Airtable({
+    apiKey: context.env.AIRTABLE_PESONAL_ACCESS_TOKEN,
+  }).base(context.env.AIRTABLE_BASE_ID);
   return new Promise((resolve, reject) => {
     base("Alerts")
       .select({
