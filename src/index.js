@@ -109,14 +109,13 @@ app.post("/webhook/:type", async (context) => {
   }
 
   try {
-    console.log("CONTEXT :", context);
     await verifyHMAC(context.req, macSecretBase64);
     console.log(`HMAC verification succeeded for ${type} webhook`);
 
     // Immediately return 200 OK to Airtable
     context.json({ message: "HMAC verified, processing webhook" }, 200);
 
-    // After returning 200, perform the actual processing
+    // After returning 200, perform the actual processing asynchronously
     if (type === "agenda") {
       handleAgendaUpdate(context).catch((error) =>
         console.error("Error handling agenda update:", error),
