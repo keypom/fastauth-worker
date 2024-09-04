@@ -3,7 +3,6 @@ const { KeyPair } = require("@near-js/crypto");
 const { Account } = require("@near-js/accounts");
 const { Near } = require("@near-js/wallet-account");
 const { InMemoryKeyStore } = require("@near-js/keystores");
-const crypto = require("crypto");
 const {
   getAgendaFromAirtable,
   getAlertsFromAirtable,
@@ -49,21 +48,40 @@ async function setupNear(context) {
   return new Account(near.connection, WORKER_ACCOUNT_ID);
 }
 
-// Helper function to verify HMAC
+// Helper function to verify HMAC using Web Crypto API
 async function verifyHMAC(request, macSecretBase64) {
   try {
-    console.log("Starting HMAC verification...");
-    const macSecretDecoded = Buffer.from(macSecretBase64, "base64");
-    const body = Buffer.from(
-      JSON.stringify(webhookNotificationDeliveryPayload),
-      "utf8",
+    console.log("Starting HMAC verification..., ", request);
+    const macSecretDecoded = Uint8Array.from(atob(macSecretBase64), (c) =>
+      c.charCodeAt(0),
     );
-    const hmac = require("crypto").createHmac("sha256", macSecretDecoded);
-    hmac.update(body.toString(), "ascii");
-    const expectedHMAC = "hmac-sha256=" + hmac.digest("hex");
-    const receivedHMAC = request.headers.get("X-Airtable-Content-MAC");
+    const body = await request.text(); // Read the body as a string
+    console.log("Request body for HMAC verification:", body);
+
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      macSecretDecoded,
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+
+    const signature = await crypto.subtle.sign(
+      "HMAC",
+      key,
+      encoder.encode(body),
+    );
+
+    const expectedHMAC =
+      "hmac-sha256=" +
+      Array.from(new Uint8Array(signature))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+    console.log("HEADERS: ", request.header);
+    const receivedHMAC = request.header("X-Airtable-Content-MAC");
+    console.log("RECEIVED HMAC: ", receivedHMAC);
     console.log("Expected HMAC:", expectedHMAC);
-    console.log("Received HMAC:", receivedHMAC);
 
     if (expectedHMAC !== receivedHMAC) {
       throw new Error("HMAC verification failed.");
@@ -91,15 +109,22 @@ app.post("/webhook/:type", async (context) => {
   }
 
   try {
+    console.log("CONTEXT :", context);
     await verifyHMAC(context.req, macSecretBase64);
     console.log(`HMAC verification succeeded for ${type} webhook`);
 
+    // Immediately return 200 OK to Airtable
+    context.json({ message: "HMAC verified, processing webhook" }, 200);
+
+    // After returning 200, perform the actual processing
     if (type === "agenda") {
-      // Call your agenda update function
-      return await handleAgendaUpdate(context);
+      handleAgendaUpdate(context).catch((error) =>
+        console.error("Error handling agenda update:", error),
+      );
     } else if (type === "alerts") {
-      // Call your alerts update function
-      return await handleAlertsUpdate(context);
+      handleAlertsUpdate(context).catch((error) =>
+        console.error("Error handling alerts update:", error),
+      );
     }
   } catch (error) {
     console.error(`Error verifying HMAC for ${type} webhook:`, error);
@@ -110,12 +135,11 @@ app.post("/webhook/:type", async (context) => {
 // Handle agenda updates
 async function handleAgendaUpdate(context) {
   try {
-    console.log("Starting agenda update...");
     const workerAccount = await setupNear(context);
     const factoryAccountId = context.env.FACTORY_ACCOUNT_ID;
 
     // Get new agenda from Airtable
-    const newAgenda = await getAgendaFromAirtable();
+    const newAgenda = await getAgendaFromAirtable(context);
     console.log("New agenda from Airtable:", newAgenda);
 
     // Get current agenda from NEAR
@@ -136,14 +160,11 @@ async function handleAgendaUpdate(context) {
         attachedDeposit: "0",
       });
       console.log("Agenda updated successfully on NEAR.");
-      return context.json({ message: "Agenda updated successfully" }, 200);
     } else {
       console.log("No changes to the agenda.");
-      return context.json({ message: "No changes to the agenda" }, 200);
     }
   } catch (error) {
     console.error("Error updating agenda:", error);
-    return context.json({ error: "Failed to update agenda" }, 500);
   }
 }
 
@@ -155,7 +176,7 @@ async function handleAlertsUpdate(context) {
     const factoryAccountId = context.env.FACTORY_ACCOUNT_ID;
 
     // Get new alerts from Airtable
-    const newAlerts = await getAlertsFromAirtable();
+    const newAlerts = await getAlertsFromAirtable(context);
     console.log("New alerts from Airtable:", newAlerts);
 
     // Get current alerts from NEAR
@@ -176,14 +197,11 @@ async function handleAlertsUpdate(context) {
         attachedDeposit: "0",
       });
       console.log("Alerts updated successfully on NEAR.");
-      return context.json({ message: "Alerts updated successfully" }, 200);
     } else {
       console.log("No changes to the alerts.");
-      return context.json({ message: "No changes to the alerts" }, 200);
     }
   } catch (error) {
     console.error("Error updating alerts:", error);
-    return context.json({ error: "Failed to update alerts" }, 500);
   }
 }
 
