@@ -24,15 +24,11 @@ app.use(
 // Helper function to setup NEAR connection
 async function setupNear(context) {
   const NETWORK = context.env.NETWORK;
-  const WORKER_ACCOUNT_ID = context.env.WORKER_ACCOUNT_ID;
-  console.log("Setting up NEAR connection with the following parameters:", {
-    NETWORK,
-    WORKER_ACCOUNT_ID,
-  });
+  const FACTORY_CONTRACT_ID = context.env.FACTORY_CONTRACT_ID;
   const workerKey = KeyPair.fromString(context.env.WORKER_NEAR_SK);
 
   let keyStore = new InMemoryKeyStore();
-  keyStore.setKey(NETWORK, WORKER_ACCOUNT_ID, workerKey);
+  keyStore.setKey(NETWORK, FACTORY_CONTRACT_ID, workerKey);
 
   let nearConfig = {
     networkId: NETWORK,
@@ -45,7 +41,7 @@ async function setupNear(context) {
 
   let near = new Near(nearConfig);
   console.log("NEAR connection established:", near);
-  return new Account(near.connection, WORKER_ACCOUNT_ID);
+  return new Account(near.connection, FACTORY_CONTRACT_ID);
 }
 
 // Helper function to verify HMAC using Web Crypto API
@@ -113,48 +109,73 @@ app.post("/webhook/:type", async (context) => {
     console.log(`HMAC verification succeeded for ${type} webhook`);
 
     // Immediately return 200 OK to Airtable
-    context.json({ message: "HMAC verified, processing webhook" }, 200);
+    const response = context.json(
+      { message: "HMAC verified, processing webhook" },
+      200,
+    );
 
     // After returning 200, perform the actual processing asynchronously
     if (type === "agenda") {
-      handleAgendaUpdate(context).catch((error) =>
+      await handleAgendaUpdate(context).catch((error) =>
         console.error("Error handling agenda update:", error),
       );
     } else if (type === "alerts") {
-      handleAlertsUpdate(context).catch((error) =>
+      await handleAlertsUpdate(context).catch((error) =>
         console.error("Error handling alerts update:", error),
       );
     }
+
+    return response; // Finalize the response to Airtable
   } catch (error) {
     console.error(`Error verifying HMAC for ${type} webhook:`, error);
     return context.json({ error: "Invalid HMAC signature" }, 403);
   }
 });
 
+const deepEqual = (obj1, obj2) => {
+  return JSON.stringify(obj1) === JSON.stringify(obj2);
+};
+
+const findDifferences = (obj1, obj2) => {
+  const diff = [];
+  obj1.forEach((item, index) => {
+    if (!deepEqual(item, obj2[index])) {
+      diff.push({ index, item1: item, item2: obj2[index] });
+    }
+  });
+  return diff;
+};
+
 // Handle agenda updates
 async function handleAgendaUpdate(context) {
   try {
     const workerAccount = await setupNear(context);
-    const factoryAccountId = context.env.FACTORY_ACCOUNT_ID;
+    const factoryAccountId = context.env.FACTORY_CONTRACT_ID;
 
     // Get new agenda from Airtable
     const newAgenda = await getAgendaFromAirtable(context);
-    console.log("New agenda from Airtable:", newAgenda);
+    console.log("New agenda from Airtable:", JSON.stringify(newAgenda));
 
     // Get current agenda from NEAR
-    const currentAgenda = await workerAccount.viewFunction({
+    let currentAgenda = await workerAccount.viewFunction({
       contractId: factoryAccountId,
       methodName: "get_agenda",
     });
-    console.log("Current agenda from NEAR:", currentAgenda);
+
+    // Parse currentAgenda from a JSON string to an object
+    currentAgenda = JSON.parse(currentAgenda);
+    console.log("Current agenda from NEAR:", JSON.stringify(currentAgenda));
 
     // Compare and update if necessary
-    if (JSON.stringify(newAgenda) !== JSON.stringify(currentAgenda)) {
+    if (!deepEqual(newAgenda, currentAgenda)) {
       console.log("Agendas differ, updating NEAR contract...");
+      const differences = findDifferences(newAgenda, currentAgenda);
+      console.log("Differences found:", differences);
+
       await workerAccount.functionCall({
         contractId: factoryAccountId,
         methodName: "set_agenda",
-        args: { agenda: newAgenda },
+        args: { new_agenda: JSON.stringify(newAgenda) },
         gas: "30000000000000",
         attachedDeposit: "0",
       });
@@ -166,32 +187,37 @@ async function handleAgendaUpdate(context) {
     console.error("Error updating agenda:", error);
   }
 }
-
 // Handle alerts updates
 async function handleAlertsUpdate(context) {
   try {
     console.log("Starting alerts update...");
     const workerAccount = await setupNear(context);
-    const factoryAccountId = context.env.FACTORY_ACCOUNT_ID;
+    const factoryAccountId = context.env.FACTORY_CONTRACT_ID;
 
     // Get new alerts from Airtable
     const newAlerts = await getAlertsFromAirtable(context);
-    console.log("New alerts from Airtable:", newAlerts);
+    console.log("New alerts from Airtable:", JSON.stringify(newAlerts));
 
     // Get current alerts from NEAR
-    const currentAlerts = await workerAccount.viewFunction({
+    let currentAlerts = await workerAccount.viewFunction({
       contractId: factoryAccountId,
       methodName: "get_alerts",
     });
-    console.log("Current alerts from NEAR:", currentAlerts);
+
+    // Parse currentAlerts from a JSON string to an object
+    currentAlerts = JSON.parse(currentAlerts);
+    console.log("Current alerts from NEAR:", JSON.stringify(currentAlerts));
 
     // Compare and update if necessary
-    if (JSON.stringify(newAlerts) !== JSON.stringify(currentAlerts)) {
+    if (!deepEqual(newAlerts, currentAlerts)) {
       console.log("Alerts differ, updating NEAR contract...");
+      const differences = findDifferences(newAlerts, currentAlerts);
+      console.log("Differences found:", differences);
+
       await workerAccount.functionCall({
         contractId: factoryAccountId,
         methodName: "set_alerts",
-        args: { alert: newAlerts },
+        args: { new_alerts: JSON.stringify(newAlerts) },
         gas: "30000000000000",
         attachedDeposit: "0",
       });
