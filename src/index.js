@@ -89,7 +89,12 @@ async function verifyHMAC(request, macSecretBase64) {
   }
 }
 
-// Handle the webhook requests
+// Global state to store timers for each webhook type
+const currentTasks = {
+  agenda: null,
+  alerts: null,
+};
+
 app.post("/webhook/:type", async (context) => {
   const { type } = context.req.param();
   console.log(`Received webhook of type: ${type}`);
@@ -114,16 +119,20 @@ app.post("/webhook/:type", async (context) => {
       200,
     );
 
-    // After returning 200, perform the actual processing asynchronously
-    if (type === "agenda") {
-      await handleAgendaUpdate(context).catch((error) =>
-        console.error("Error handling agenda update:", error),
-      );
-    } else if (type === "alerts") {
-      await handleAlertsUpdate(context).catch((error) =>
-        console.error("Error handling alerts update:", error),
-      );
+    // If there is an ongoing task, cancel it by rejecting its Promise
+    if (currentTasks[type]) {
+      console.log(`Cancelling existing task for ${type} webhook`);
+      currentTasks[type].cancel(); // Call the cancel function if it exists
     }
+
+    // Create a new task
+    const task = createProcessingTask(context, type);
+
+    // Store the task in the currentTasks object
+    currentTasks[type] = task;
+
+    // Ensure the worker keeps running until the task is finished
+    context.executionCtx.waitUntil(task.promise);
 
     return response; // Finalize the response to Airtable
   } catch (error) {
@@ -131,6 +140,40 @@ app.post("/webhook/:type", async (context) => {
     return context.json({ error: "Invalid HMAC signature" }, 403);
   }
 });
+
+// Helper function to create a processing task with a cancelable promise
+function createProcessingTask(context, type) {
+  let cancel;
+
+  const promise = new Promise((resolve, reject) => {
+    cancel = () => {
+      console.log(`Task for ${type} webhook canceled.`);
+      reject(new Error(`Task for ${type} canceled`));
+    };
+
+    // Simulate a delay with setTimeout
+    setTimeout(async () => {
+      console.log(`Processing the latest ${type} webhook after 5 seconds`);
+      try {
+        const timestamp = Date.now();
+        if (type === "agenda") {
+          await handleAgendaUpdate(context, timestamp).catch((error) =>
+            console.error("Error handling agenda update:", error),
+          );
+        } else if (type === "alerts") {
+          await handleAlertsUpdate(context, timestamp).catch((error) =>
+            console.error("Error handling alerts update:", error),
+          );
+        }
+        resolve(); // Resolve the promise if successful
+      } catch (error) {
+        reject(error); // Reject the promise if an error occurs
+      }
+    }, 2000); // Wait for 2 seconds before processing
+  });
+
+  return { promise, cancel };
+}
 
 const deepEqual = (obj1, obj2) => {
   return JSON.stringify(obj1) === JSON.stringify(obj2);
@@ -147,7 +190,7 @@ const findDifferences = (obj1, obj2) => {
 };
 
 // Handle agenda updates
-async function handleAgendaUpdate(context) {
+async function handleAgendaUpdate(context, timestamp) {
   try {
     const workerAccount = await setupNear(context);
     const factoryAccountId = context.env.FACTORY_CONTRACT_ID;
@@ -157,10 +200,12 @@ async function handleAgendaUpdate(context) {
     console.log("New agenda from Airtable:", JSON.stringify(newAgenda));
 
     // Get current agenda from NEAR
-    let currentAgenda = await workerAccount.viewFunction({
+    let agendaAtTimestamp = await workerAccount.viewFunction({
       contractId: factoryAccountId,
       methodName: "get_agenda",
     });
+    let currentAgenda = agendaAtTimestamp[0];
+    console.log("Current agenda from NEAR:", currentAgenda);
 
     // Parse currentAgenda from a JSON string to an object
     currentAgenda = JSON.parse(currentAgenda);
@@ -175,7 +220,10 @@ async function handleAgendaUpdate(context) {
       await workerAccount.functionCall({
         contractId: factoryAccountId,
         methodName: "set_agenda",
-        args: { new_agenda: JSON.stringify(newAgenda) },
+        args: {
+          new_agenda: JSON.stringify(newAgenda),
+          timestamp, // Pass the timestamp here
+        },
         gas: "30000000000000",
         attachedDeposit: "0",
       });
@@ -187,8 +235,9 @@ async function handleAgendaUpdate(context) {
     console.error("Error updating agenda:", error);
   }
 }
+
 // Handle alerts updates
-async function handleAlertsUpdate(context) {
+async function handleAlertsUpdate(context, timestamp) {
   try {
     console.log("Starting alerts update...");
     const workerAccount = await setupNear(context);
@@ -199,10 +248,12 @@ async function handleAlertsUpdate(context) {
     console.log("New alerts from Airtable:", JSON.stringify(newAlerts));
 
     // Get current alerts from NEAR
-    let currentAlerts = await workerAccount.viewFunction({
+    let alertAtTimestamp = await workerAccount.viewFunction({
       contractId: factoryAccountId,
       methodName: "get_alerts",
     });
+    let currentAlerts = alertAtTimestamp[0];
+    console.log("Current alerts from NEAR:", currentAlerts);
 
     // Parse currentAlerts from a JSON string to an object
     currentAlerts = JSON.parse(currentAlerts);
@@ -217,7 +268,10 @@ async function handleAlertsUpdate(context) {
       await workerAccount.functionCall({
         contractId: factoryAccountId,
         methodName: "set_alerts",
-        args: { new_alerts: JSON.stringify(newAlerts) },
+        args: {
+          new_alerts: JSON.stringify(newAlerts),
+          timestamp, // Pass the timestamp here
+        },
         gas: "30000000000000",
         attachedDeposit: "0",
       });
