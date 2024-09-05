@@ -77,6 +77,8 @@ async function fetchUpdatedAgenda() {
   const account = await setupNear();
   const factoryAccountId = FACTORY_CONTRACT_ID;
 
+  // wait 8 seconds for the agenda to be updated
+  await new Promise((resolve) => setTimeout(resolve, 8000));
   const agenda = await account.viewFunction({
     contractId: factoryAccountId,
     methodName: "get_agenda",
