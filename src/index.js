@@ -189,14 +189,15 @@ const findDifferences = (obj1, obj2) => {
   return diff;
 };
 
-const addTimestampIfMissing = (item, timestamp) => {
-  if (!item.Time) {
-    item.Time = timestamp;
+const addTimestampIfMissing = (item, existingItem, timestamp) => {
+  if (!existingItem.Time) {
+    item.Time = timestamp; // Add timestamp to the blockchain data only if it doesn't exist
+  } else {
+    item.Time = existingItem.Time; // Preserve the existing timestamp
   }
   return item;
 };
 
-// Handle agenda updates
 async function handleAgendaUpdate(context, timestamp) {
   try {
     const workerAccount = await setupNear(context);
@@ -212,35 +213,30 @@ async function handleAgendaUpdate(context, timestamp) {
       methodName: "get_agenda",
     });
     let currentAgenda = agendaAtTimestamp[0];
+    currentAgenda = JSON.parse(currentAgenda); // Parse blockchain agenda
+
     console.log("Current agenda from NEAR:", currentAgenda);
 
-    // Parse currentAgenda from a JSON string to an object
-    currentAgenda = JSON.parse(currentAgenda);
-    console.log("Current agenda from NEAR:", JSON.stringify(currentAgenda));
-
-    // Compare and update if necessary
+    // Compare and update blockchain if necessary
     if (!deepEqual(newAgenda, currentAgenda)) {
-      console.log("Agendas differ, checking for changes...");
+      console.log("Agendas differ, updating blockchain...");
 
-      // Find differences between the new and current agenda
-      const differences = findDifferences(newAgenda, currentAgenda);
-      console.log("Differences found:", differences);
-
-      // Update only the changed entries and add a timestamp if missing
-      differences.forEach(({ index, item1: newItem }) => {
-        newAgenda[index] = addTimestampIfMissing(
+      const updatedAgenda = newAgenda.map((newItem, index) => {
+        const existingItem = currentAgenda[index] || {};
+        return addTimestampIfMissing(
           newItem,
+          existingItem,
           new Date().toISOString(),
         );
       });
 
-      // Update NEAR with the modified agenda containing timestamps
+      // Update blockchain with the modified agenda (with timestamps)
       await workerAccount.functionCall({
         contractId: factoryAccountId,
         methodName: "set_agenda",
         args: {
-          new_agenda: JSON.stringify(newAgenda),
-          timestamp, // Pass the timestamp here
+          new_agenda: JSON.stringify(updatedAgenda),
+          timestamp,
         },
         gas: "30000000000000",
         attachedDeposit: "0",
@@ -254,7 +250,6 @@ async function handleAgendaUpdate(context, timestamp) {
   }
 }
 
-// Handle alerts updates
 async function handleAlertsUpdate(context, timestamp) {
   try {
     console.log("Starting alerts update...");
@@ -271,35 +266,30 @@ async function handleAlertsUpdate(context, timestamp) {
       methodName: "get_alerts",
     });
     let currentAlerts = alertAtTimestamp[0];
+    currentAlerts = JSON.parse(currentAlerts); // Parse blockchain alerts
+
     console.log("Current alerts from NEAR:", currentAlerts);
 
-    // Parse currentAlerts from a JSON string to an object
-    currentAlerts = JSON.parse(currentAlerts);
-    console.log("Current alerts from NEAR:", JSON.stringify(currentAlerts));
-
-    // Compare and update if necessary
+    // Compare and update blockchain if necessary
     if (!deepEqual(newAlerts, currentAlerts)) {
-      console.log("Alerts differ, checking for changes...");
+      console.log("Alerts differ, updating blockchain...");
 
-      // Find differences between the new and current alerts
-      const differences = findDifferences(newAlerts, currentAlerts);
-      console.log("Differences found:", differences);
-
-      // Update only the changed entries and add a timestamp if missing
-      differences.forEach(({ index, item1: newItem, item2: currentItem }) => {
-        newAlerts[index] = addTimestampIfMissing(
+      const updatedAlerts = newAlerts.map((newItem, index) => {
+        const existingItem = currentAlerts[index] || {};
+        return addTimestampIfMissing(
           newItem,
+          existingItem,
           new Date().toISOString(),
         );
       });
 
-      // Update NEAR with the modified alerts containing timestamps
+      // Update blockchain with the modified alerts (with timestamps)
       await workerAccount.functionCall({
         contractId: factoryAccountId,
         methodName: "set_alerts",
         args: {
-          new_alerts: JSON.stringify(newAlerts),
-          timestamp, // Pass the timestamp here
+          new_alerts: JSON.stringify(updatedAlerts),
+          timestamp,
         },
         gas: "30000000000000",
         attachedDeposit: "0",
