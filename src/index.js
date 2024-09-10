@@ -189,6 +189,13 @@ const findDifferences = (obj1, obj2) => {
   return diff;
 };
 
+const addTimestampIfMissing = (item, timestamp) => {
+  if (!item.Time) {
+    item.Time = timestamp;
+  }
+  return item;
+};
+
 // Handle agenda updates
 async function handleAgendaUpdate(context, timestamp) {
   try {
@@ -213,10 +220,18 @@ async function handleAgendaUpdate(context, timestamp) {
 
     // Compare and update if necessary
     if (!deepEqual(newAgenda, currentAgenda)) {
-      console.log("Agendas differ, updating NEAR contract...");
+      console.log("Agendas differ, checking for changes...");
+
+      // Find differences between the new and current agenda
       const differences = findDifferences(newAgenda, currentAgenda);
       console.log("Differences found:", differences);
 
+      // Update only the changed entries and add a timestamp if missing
+      differences.forEach(({ index, item1: newItem }) => {
+        newAgenda[index] = addTimestampIfMissing(newItem, timestamp);
+      });
+
+      // Update NEAR with the modified agenda containing timestamps
       await workerAccount.functionCall({
         contractId: factoryAccountId,
         methodName: "set_agenda",
@@ -261,10 +276,21 @@ async function handleAlertsUpdate(context, timestamp) {
 
     // Compare and update if necessary
     if (!deepEqual(newAlerts, currentAlerts)) {
-      console.log("Alerts differ, updating NEAR contract...");
+      console.log("Alerts differ, checking for changes...");
+
+      // Find differences between the new and current alerts
       const differences = findDifferences(newAlerts, currentAlerts);
       console.log("Differences found:", differences);
 
+      // Update only the changed entries and add a timestamp if missing
+      differences.forEach(({ index, item1: newItem, item2: currentItem }) => {
+        newAlerts[index] = addTimestampIfMissing(
+          newItem,
+          new Date().toISOString(),
+        );
+      });
+
+      // Update NEAR with the modified alerts containing timestamps
       await workerAccount.functionCall({
         contractId: factoryAccountId,
         methodName: "set_alerts",

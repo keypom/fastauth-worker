@@ -3,7 +3,6 @@
   "name": "airtable-worker",
   "version": "1.0.0",
   "description": "A template for using stripe-node in a Cloudflare Worker",
-  "type": "module",
   "scripts": {
     "dev": "wrangler dev src/index.js",
     "dev-deploy": "wrangler deploy --minify src/index.js --env dev",
