@@ -228,7 +228,10 @@ async function handleAgendaUpdate(context, timestamp) {
 
       // Update only the changed entries and add a timestamp if missing
       differences.forEach(({ index, item1: newItem }) => {
-        newAgenda[index] = addTimestampIfMissing(newItem, timestamp);
+        newAgenda[index] = addTimestampIfMissing(
+          newItem,
+          new Date().toISOString(),
+        );
       });
 
       // Update NEAR with the modified agenda containing timestamps
