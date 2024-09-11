@@ -1,6 +1,7 @@
 {
   "private": true,
   "name": "airtable-worker",
+  "type": "module",
   "version": "1.0.0",
   "description": "A template for using stripe-node in a Cloudflare Worker",
   "scripts": {

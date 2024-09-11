@@ -21,6 +21,33 @@ app.use(
   }),
 );
 
+// Retry helper with exponential backoff
+async function retryWithBackoff(fn, retries = 5, backoff = 1000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await fn(); // Try executing the function
+    } catch (error) {
+      if (attempt === retries || !shouldRetry(error)) {
+        throw error; // Rethrow the error if we've reached max retries or it's not retryable
+      }
+      console.warn(`Attempt ${attempt} failed. Retrying in ${backoff}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, backoff)); // Wait before retrying
+      backoff *= 2; // Exponential backoff
+    }
+  }
+}
+
+// Helper function to determine if error is retryable
+function shouldRetry(error) {
+  if (error.code === "ECONNRESET" || error.code === "ETIMEDOUT") {
+    return true; // Retry on network errors
+  }
+  if (error.response && error.response.status === 429) {
+    return true; // Retry on rate limiting
+  }
+  return false; // Don't retry on other errors
+}
+
 // Helper function to setup NEAR connection
 async function setupNear(context) {
   const NETWORK = context.env.NETWORK;
@@ -175,49 +202,25 @@ function createProcessingTask(context, type) {
   return { promise, cancel };
 }
 
-const deepEqual = (obj1, obj2) => {
-  return JSON.stringify(obj1) === JSON.stringify(obj2);
-};
-
-const findDifferences = (obj1, obj2) => {
-  const diff = [];
-  obj1.forEach((item, index) => {
-    if (!deepEqual(item, obj2[index])) {
-      diff.push({ index, item1: item, item2: obj2[index] });
-    }
-  });
-  return diff;
-};
-
-const addTimestampIfMissing = (item, existingItem, timestamp) => {
-  if (!existingItem.Time) {
-    item.Time = timestamp; // Add timestamp to the blockchain data only if it doesn't exist
-  } else {
-    item.Time = existingItem.Time; // Preserve the existing timestamp
-  }
-  return item;
-};
-
+// Handle agenda updates with retries
 async function handleAgendaUpdate(context, timestamp) {
   try {
     const workerAccount = await setupNear(context);
     const factoryAccountId = context.env.FACTORY_CONTRACT_ID;
 
-    // Get new agenda from Airtable
     const newAgenda = await getAgendaFromAirtable(context);
     console.log("New agenda from Airtable:", JSON.stringify(newAgenda));
 
-    // Get current agenda from NEAR
-    let agendaAtTimestamp = await workerAccount.viewFunction({
-      contractId: factoryAccountId,
-      methodName: "get_agenda",
-    });
-    let currentAgenda = agendaAtTimestamp[0];
-    currentAgenda = JSON.parse(currentAgenda); // Parse blockchain agenda
+    let agendaAtTimestamp = await retryWithBackoff(() =>
+      workerAccount.viewFunction({
+        contractId: factoryAccountId,
+        methodName: "get_agenda",
+      }),
+    );
 
+    let currentAgenda = JSON.parse(agendaAtTimestamp[0]);
     console.log("Current agenda from NEAR:", currentAgenda);
 
-    // Compare and update blockchain if necessary
     if (!deepEqual(newAgenda, currentAgenda)) {
       console.log("Agendas differ, updating blockchain...");
 
@@ -230,17 +233,19 @@ async function handleAgendaUpdate(context, timestamp) {
         );
       });
 
-      // Update blockchain with the modified agenda (with timestamps)
-      await workerAccount.functionCall({
-        contractId: factoryAccountId,
-        methodName: "set_agenda",
-        args: {
-          new_agenda: JSON.stringify(updatedAgenda),
-          timestamp,
-        },
-        gas: "30000000000000",
-        attachedDeposit: "0",
-      });
+      await retryWithBackoff(() =>
+        workerAccount.functionCall({
+          contractId: factoryAccountId,
+          methodName: "set_agenda",
+          args: {
+            new_agenda: JSON.stringify(updatedAgenda),
+            timestamp,
+          },
+          gas: "30000000000000",
+          attachedDeposit: "0",
+        }),
+      );
+
       console.log("Agenda updated successfully on NEAR.");
     } else {
       console.log("No changes to the agenda.");
@@ -250,27 +255,26 @@ async function handleAgendaUpdate(context, timestamp) {
   }
 }
 
+// Handle alerts updates with retries
 async function handleAlertsUpdate(context, timestamp) {
   try {
     console.log("Starting alerts update...");
     const workerAccount = await setupNear(context);
     const factoryAccountId = context.env.FACTORY_CONTRACT_ID;
 
-    // Get new alerts from Airtable
     const newAlerts = await getAlertsFromAirtable(context);
     console.log("New alerts from Airtable:", JSON.stringify(newAlerts));
 
-    // Get current alerts from NEAR
-    let alertAtTimestamp = await workerAccount.viewFunction({
-      contractId: factoryAccountId,
-      methodName: "get_alerts",
-    });
-    let currentAlerts = alertAtTimestamp[0];
-    currentAlerts = JSON.parse(currentAlerts); // Parse blockchain alerts
+    let alertAtTimestamp = await retryWithBackoff(() =>
+      workerAccount.viewFunction({
+        contractId: factoryAccountId,
+        methodName: "get_alerts",
+      }),
+    );
 
+    let currentAlerts = JSON.parse(alertAtTimestamp[0]);
     console.log("Current alerts from NEAR:", currentAlerts);
 
-    // Compare and update blockchain if necessary
     if (!deepEqual(newAlerts, currentAlerts)) {
       console.log("Alerts differ, updating blockchain...");
 
@@ -283,17 +287,19 @@ async function handleAlertsUpdate(context, timestamp) {
         );
       });
 
-      // Update blockchain with the modified alerts (with timestamps)
-      await workerAccount.functionCall({
-        contractId: factoryAccountId,
-        methodName: "set_alerts",
-        args: {
-          new_alerts: JSON.stringify(updatedAlerts),
-          timestamp,
-        },
-        gas: "30000000000000",
-        attachedDeposit: "0",
-      });
+      await retryWithBackoff(() =>
+        workerAccount.functionCall({
+          contractId: factoryAccountId,
+          methodName: "set_alerts",
+          args: {
+            new_alerts: JSON.stringify(updatedAlerts),
+            timestamp,
+          },
+          gas: "30000000000000",
+          attachedDeposit: "0",
+        }),
+      );
+
       console.log("Alerts updated successfully on NEAR.");
     } else {
       console.log("No changes to the alerts.");
