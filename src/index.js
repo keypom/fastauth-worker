@@ -202,6 +202,19 @@ function createProcessingTask(context, type) {
   return { promise, cancel };
 }
 
+const deepEqual = (obj1, obj2) => {
+  return JSON.stringify(obj1) === JSON.stringify(obj2);
+};
+
+const addTimestampIfMissing = (item, existingItem, timestamp) => {
+  if (!existingItem.Time) {
+    item.Time = timestamp; // Add timestamp to the blockchain data only if it doesn't exist
+  } else {
+    item.Time = existingItem.Time; // Preserve the existing timestamp
+  }
+  return item;
+};
+
 // Handle agenda updates with retries
 async function handleAgendaUpdate(context, timestamp) {
   try {
