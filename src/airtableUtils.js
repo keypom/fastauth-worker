@@ -58,7 +58,39 @@ async function getAlertsFromAirtable(context) {
   });
 }
 
+// New function to fetch Test Attendees
+async function getAttendeeInfoFromAirtable(context) {
+  console.log("Fetching Test Attendees from Airtable... ", context.env);
+  const base = new Airtable({
+    apiKey: context.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
+  }).base(context.env.AIRTABLE_BASE_ID);
+
+  return new Promise((resolve, reject) => {
+    const attendees = [];
+    base("Test Attendees")
+      .select({
+        view: "Grid view",
+      })
+      .eachPage(
+        (records, fetchNextPage) => {
+          // Accumulate records from the current page
+          records.forEach((record) => attendees.push(record.fields));
+
+          // Fetch next page if available
+          fetchNextPage();
+        },
+        (err) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve(attendees); // Resolve with the accumulated attendee data
+        },
+      );
+  });
+}
+
 module.exports = {
   getAgendaFromAirtable,
   getAlertsFromAirtable,
+  getAttendeeInfoFromAirtable,
 };

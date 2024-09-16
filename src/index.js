@@ -6,12 +6,17 @@ const { InMemoryKeyStore } = require("@near-js/keystores");
 const {
   getAgendaFromAirtable,
   getAlertsFromAirtable,
+  getAttendeeInfoFromAirtable,
 } = require("./airtableUtils");
 const app = new Hono();
 import { cors } from "hono/cors";
 
 // Setup CORS
-const allowed_origins = ["http://localhost:3000", "http://localhost:3001"];
+const allowed_origins = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "http://localhost:3001",
+];
 app.use(
   "*",
   cors({
@@ -20,6 +25,26 @@ app.use(
     allowedHeaders: ["Content-Type"],
   }),
 );
+
+function parseJwt(token) {
+  try {
+    const base64Url = token.split(".")[1];
+    if (!base64Url) throw new Error("Invalid token");
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => {
+          return "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2);
+        })
+        .join(""),
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    console.error("Failed to parse JWT:", e);
+    throw new Error("Failed to parse JWT");
+  }
+}
 
 // Retry helper with exponential backoff
 async function retryWithBackoff(fn, retries = 5, backoff = 1000) {
@@ -167,6 +192,120 @@ app.post("/webhook/:type", async (context) => {
     return context.json({ error: "Invalid HMAC signature" }, 403);
   }
 });
+
+app.get("/fetch-attendees", async (context) => {
+  const authHeader = context.req.header("Authorization");
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return context.json({ error: "Unauthorized" }, 401);
+  }
+
+  const idToken = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+  try {
+    // Decode the ID token
+    const payload = parseJwt(idToken);
+
+    // Verify the token
+    await verifyIdToken(idToken, payload, context.env.GOOGLE_CLIENT_ID);
+
+    // Check if the email is an authorized admin
+    const authorizedAdmins = context.env.AUTHORIZED_ADMINS.split(",");
+    if (!authorizedAdmins.includes(payload.email)) {
+      return context.json({ error: "Access denied" }, 403);
+    }
+
+    // Fetch attendee data
+    const attendees = await getAttendeeInfoFromAirtable(context);
+    return context.json({ attendees });
+  } catch (error) {
+    console.error("Error verifying ID token:", error);
+    return context.json({ error: "Invalid or expired token" }, 401);
+  }
+});
+
+async function verifyIdToken(idToken, payload, clientId) {
+  // Verify the issuer
+  if (
+    payload.iss !== "https://accounts.google.com" &&
+    payload.iss !== "accounts.google.com"
+  ) {
+    throw new Error("Invalid issuer");
+  }
+
+  // **Add these logs**
+  console.log("payload.aud:", payload.aud);
+  console.log("Expected clientId:", clientId);
+
+  // Verify the audience
+  if (Array.isArray(payload.aud)) {
+    if (!payload.aud.includes(clientId)) {
+      throw new Error("Invalid audience");
+    }
+  } else {
+    if (payload.aud !== clientId) {
+      throw new Error("Invalid audience");
+    }
+  }
+
+  // Verify the expiration
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.exp < now) {
+    throw new Error("Token expired");
+  }
+
+  // Verify the signature using Google's public keys
+  const valid = await verifySignature(idToken);
+  if (!valid) {
+    throw new Error("Invalid token signature");
+  }
+}
+
+// Function to verify the token's signature
+async function verifySignature(idToken) {
+  // Fetch Google's public keys
+  const response = await fetch("https://www.googleapis.com/oauth2/v3/certs");
+  const { keys } = await response.json();
+
+  // Parse the JWT header to get the key ID (kid)
+  const header = JSON.parse(
+    atob(idToken.split(".")[0].replace(/-/g, "+").replace(/_/g, "/")),
+  );
+  const key = keys.find((k) => k.kid === header.kid);
+
+  if (!key) {
+    throw new Error("Invalid key ID");
+  }
+
+  // Import the public key
+  const cryptoKey = await crypto.subtle.importKey(
+    "jwk",
+    key,
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      hash: { name: "SHA-256" },
+    },
+    false,
+    ["verify"],
+  );
+
+  // Verify the signature
+  const encoder = new TextEncoder();
+  const data = encoder.encode(idToken.split(".").slice(0, 2).join("."));
+  const signature = Uint8Array.from(
+    atob(idToken.split(".")[2].replace(/-/g, "+").replace(/_/g, "/")),
+    (c) => c.charCodeAt(0),
+  );
+
+  const valid = await crypto.subtle.verify(
+    "RSASSA-PKCS1-v1_5",
+    cryptoKey,
+    signature,
+    data,
+  );
+
+  return valid;
+}
 
 // Helper function to create a processing task with a cancelable promise
 function createProcessingTask(context, type) {
