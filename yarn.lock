@@ -1021,7 +1021,7 @@
     randombytes "2.1.0"
     secp256k1 "5.0.0"
 
-"@near-js/keystores-browser@1.0.4":
+"@near-js/keystores-browser@0.2.0-next.15":
   version "0.2.0-next.15"
   resolved "https://registry.yarnpkg.com/@near-js/keystores-browser/-/keystores-browser-0.2.0-next.15.tgz#26c689bf3880af323e1db7e4c62c4cf28dfb55fa"
   integrity sha512-2FiK31hJLSUII9QLT0pqhSV1E7KENWi64zfEyypBBBK/HXJzdXE3hKs9Sau+5qx85fciYywY4IWdsfPR+U1jjA==
@@ -1535,6 +1535,11 @@ cross-spawn@^7.0.3:
     shebang-command "^2.0.0"
     which "^2.0.1"
 
+crypto@^1.0.1:
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/crypto/-/crypto-1.0.1.tgz#2af1b7cad8175d24c8a1b0778255794a21803037"
+  integrity sha512-VxBKmeNcqQdiUQUW2Tzq0t377b54N2bMtXO/qiLa+6eRRmmC4qT3D4OnTGoT/U6O9aklQ/jTwbOtRMTTY8G0Ig==
+
 data-uri-to-buffer@^2.0.0:
   version "2.0.2"
   resolved "https://registry.yarnpkg.com/data-uri-to-buffer/-/data-uri-to-buffer-2.0.2.tgz#d296973d5a4897a5dbe31716d118211921f04770"
@@ -1632,6 +1637,11 @@ dns-packet@^5.2.2, dns-packet@^5.6.1:
   integrity sha512-l4gcSouhcgIKRvyy99RNVOgxXiicE+2jZoNmaNmZ6JXiGajBOJAesk1OBlJuM5k2c+eudGdLxDqXuPCKIj6kpw==
   dependencies:
     "@leichtgewicht/ip-codec" "^2.0.1"
+
+dotenv@^16.4.5:
+  version "16.4.5"
+  resolved "https://registry.yarnpkg.com/dotenv/-/dotenv-16.4.5.tgz#cdd3b3b604cb327e286b4762e13502f717cb099f"
+  integrity sha512-ZmdL2rui+eB2YwhsWzjInR8LldtZHGDoQ1ugH85ppHKwpUHL7j7rN0Ti9NCnGiQbhaZ11FpR+7ao1dNsmduNUg==
 
 elliptic@^6.5.4:
   version "6.5.7"
@@ -2551,7 +2561,7 @@ node-domexception@^2.0.1:
   resolved "https://registry.yarnpkg.com/node-domexception/-/node-domexception-2.0.1.tgz#83b0d101123b5bbf91018fd569a58b88ae985e5b"
   integrity sha512-M85rnSC7WQ7wnfQTARPT4LrK7nwCHLdDFOCcItZMhTQjyCebJH8GciKqYJNgaOFZs9nFmTmd/VMyi3OW5jA47w==
 
-node-fetch@^2.6.1, node-fetch@^2.6.7:
+node-fetch@2, node-fetch@^2.6.1, node-fetch@^2.6.7:
   version "2.7.0"
   resolved "https://registry.yarnpkg.com/node-fetch/-/node-fetch-2.7.0.tgz#d0f0fa6e3e2dc1d27efcd8ad99d550bda94d187d"
   integrity sha512-c4FRfUm/dbcWZ7U+1Wq0AwCyFL+3nt2bEw05wfxSz+DWpWsitgmSgYmy2dQdWyKC1694ELPqMs/YzUSNozLt8A==

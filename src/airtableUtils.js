@@ -1,0 +1,64 @@
+const Airtable = require("airtable");
+
+async function getAgendaFromAirtable(context) {
+  const base = new Airtable({
+    apiKey: context.env.AIRTABLE_PESONAL_ACCESS_TOKEN,
+  }).base(context.env.AIRTABLE_BASE_ID);
+
+  return new Promise((resolve, reject) => {
+    const agenda = [];
+    base("Agenda")
+      .select({
+        view: "Grid view",
+      })
+      .eachPage(
+        (records, fetchNextPage) => {
+          // Accumulate records from the current page
+          records.forEach((record) => agenda.push(record.fields));
+
+          // Fetch next page if available
+          fetchNextPage();
+        },
+        (err) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve(agenda); // Resolve with the accumulated agenda data
+        },
+      );
+  });
+}
+
+async function getAlertsFromAirtable(context) {
+  const base = new Airtable({
+    apiKey: context.env.AIRTABLE_PESONAL_ACCESS_TOKEN,
+  }).base(context.env.AIRTABLE_BASE_ID);
+
+  return new Promise((resolve, reject) => {
+    const alerts = [];
+    base("Alerts")
+      .select({
+        view: "Grid view",
+      })
+      .eachPage(
+        (records, fetchNextPage) => {
+          // Accumulate records from the current page
+          records.forEach((record) => alerts.push(record.fields));
+
+          // Fetch next page if available
+          fetchNextPage();
+        },
+        (err) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve(alerts); // Resolve with the accumulated alerts data
+        },
+      );
+  });
+}
+
+module.exports = {
+  getAgendaFromAirtable,
+  getAlertsFromAirtable,
+};

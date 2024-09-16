@@ -1,6 +1,7 @@
 # build
 dist
 .parcel-cache
+.dev.vars
 
 # dependencies
 /node_modules

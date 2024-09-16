@@ -14,7 +14,19 @@ FIREWALL="FALSE"
 [env.dev]
 [env.dev.vars]
 ENVIRONMENT="development"
-WORKER_URL='https://stripe-worker-production.keypom.workers.dev'
 NETWORK='testnet'
-WORKER_ACCOUNT_ID='cf-worker.redacted.testnet'
 FIREWALL="FALSE"
+FACTORY_CONTRACT_ID='1726003020608-factory.testnet'
+AIRTABLE_BASE_ID='appQsBhe43rrhfa6S'
+
+# EXPIRATIONS
+AGENDA_EXPIRATION='2024-09-18T19:06:27.735Z'
+ALERTS_EXPIRATION='2024-09-18T19:06:28.130Z'
+
+# TABLES
+AGENDA_TABLE_ID='tblSzutUhYBOnYFC1'
+ALERTS_TABLE_ID='tblQUiJAARw6ns18Q'
+
+# WEBHOOKS
+AGENDA_WEBHOOK_ID='achrsZv4pjVErOWZG'
+ALERTS_WEBHOOK_ID='achiVka7yBzSVUhfx'
