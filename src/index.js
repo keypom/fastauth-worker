@@ -224,6 +224,39 @@ app.get("/fetch-attendees", async (context) => {
   }
 });
 
+app.get("/fetch-admin-login", async (context) => {
+  const authHeader = context.req.header("Authorization");
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return context.json({ error: "Unauthorized" }, 401);
+  }
+
+  const idToken = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+  try {
+    // Decode the ID token
+    const payload = parseJwt(idToken);
+
+    // Verify the token
+    await verifyIdToken(idToken, payload, context.env.GOOGLE_CLIENT_ID);
+
+    // Check if the email is an authorized admin
+    const authorizedAdmins = context.env.AUTHORIZED_ADMINS.split(",");
+    if (!authorizedAdmins.includes(payload.email)) {
+      return context.json({ error: "Access denied" }, 403);
+    }
+
+    return context.json({
+      accountId: `admin.${context.env.FACTORY_CONTRACT_ID}`,
+      displayName: "admin",
+      secretKey: context.env.ADMIN_NEAR_SK,
+    });
+  } catch (error) {
+    console.error("Error verifying ID token:", error);
+    return context.json({ error: "Invalid or expired token" }, 401);
+  }
+});
+
 async function verifyIdToken(idToken, payload, clientId) {
   // Verify the issuer
   if (

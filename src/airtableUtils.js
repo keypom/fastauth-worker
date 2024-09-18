@@ -2,7 +2,7 @@ const Airtable = require("airtable");
 
 async function getAgendaFromAirtable(context) {
   const base = new Airtable({
-    apiKey: context.env.AIRTABLE_PESONAL_ACCESS_TOKEN,
+    apiKey: context.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
   }).base(context.env.AIRTABLE_BASE_ID);
 
   return new Promise((resolve, reject) => {
@@ -31,7 +31,7 @@ async function getAgendaFromAirtable(context) {
 
 async function getAlertsFromAirtable(context) {
   const base = new Airtable({
-    apiKey: context.env.AIRTABLE_PESONAL_ACCESS_TOKEN,
+    apiKey: context.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
   }).base(context.env.AIRTABLE_BASE_ID);
 
   return new Promise((resolve, reject) => {
@@ -67,9 +67,9 @@ async function getAttendeeInfoFromAirtable(context) {
 
   return new Promise((resolve, reject) => {
     const attendees = [];
-    base("Test Attendees")
+    base("Applied to Attend")
       .select({
-        view: "Grid view",
+        view: "Grid view - Applied to Attend",
       })
       .eachPage(
         (records, fetchNextPage) => {
