@@ -13,10 +13,10 @@ FIREWALL="FALSE"
 
 [env.dev]
 [env.dev.vars]
-ENVIRONMENT="development"
+ENVIRONMENT='development'
 NETWORK='testnet'
-FIREWALL="FALSE"
-FACTORY_CONTRACT_ID='1726599533786-factory.testnet'
+FIREWALL='FALSE'
+FACTORY_CONTRACT_ID='1727275535421-factory.testnet'
 AIRTABLE_BASE_ID='appQsBhe43rrhfa6S'
 
 # EXPIRATIONS
