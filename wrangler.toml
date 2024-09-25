@@ -1,15 +1,24 @@
 name = "airtable-worker"
 compatibility_date = "2023-01-01"
 node_compat = true
+main = "src/index.js"
 # compatibility_flags = [ "nodejs_compat"  ]
 
 [env.production]
 [env.production.vars]
-ENVIRONMENT="production"
-WORKER_URL='https://stripe-worker-production.keypom.workers.dev'
-NETWORK='mainnet'
-WORKER_ACCOUNT_ID='cf-worker.redacted.near'
-FIREWALL="FALSE"
+ENVIRONMENT='development'
+NETWORK='testnet'
+FIREWALL='FALSE'
+FACTORY_CONTRACT_ID='1727275535421-factory.testnet'
+AIRTABLE_BASE_ID='appQsBhe43rrhfa6S'
+AGENDA_EXPIRATION='2024-10-02T16:11:14.294Z'
+ALERTS_EXPIRATION='2024-10-02T16:11:14.671Z'
+AGENDA_TABLE_ID='tblSzutUhYBOnYFC1'
+ALERTS_TABLE_ID='tblQUiJAARw6ns18Q'
+AGENDA_WEBHOOK_ID='achDNenHlwL29R3Ip'
+ALERTS_WEBHOOK_ID='achSNTl1eAMW5c52Z'
+[env.production.triggers]
+crons = ["0 0 * * *"]  # Every day at midnight
 
 [env.dev]
 [env.dev.vars]
@@ -18,15 +27,11 @@ NETWORK='testnet'
 FIREWALL='FALSE'
 FACTORY_CONTRACT_ID='1727275535421-factory.testnet'
 AIRTABLE_BASE_ID='appQsBhe43rrhfa6S'
-
-# EXPIRATIONS
-AGENDA_EXPIRATION='2024-09-23T15:43:12.812Z'
-ALERTS_EXPIRATION='2024-09-23T15:43:13.265Z'
-
-# TABLES
+AGENDA_EXPIRATION='2024-10-02T16:11:14.294Z'
+ALERTS_EXPIRATION='2024-10-02T16:11:14.671Z'
 AGENDA_TABLE_ID='tblSzutUhYBOnYFC1'
 ALERTS_TABLE_ID='tblQUiJAARw6ns18Q'
-
-# WEBHOOKS
-AGENDA_WEBHOOK_ID='achrsZv4pjVErOWZG'
-ALERTS_WEBHOOK_ID='achiVka7yBzSVUhfx'
+AGENDA_WEBHOOK_ID='achDNenHlwL29R3Ip'
+ALERTS_WEBHOOK_ID='achSNTl1eAMW5c52Z'
+[env.dev.triggers]
+crons = ["0 0 * * *"]  # Every day at midnight

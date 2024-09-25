@@ -1,15 +1,16 @@
-const { Hono } = require("hono");
-const { KeyPair } = require("@near-js/crypto");
-const { Account } = require("@near-js/accounts");
-const { Near } = require("@near-js/wallet-account");
-const { InMemoryKeyStore } = require("@near-js/keystores");
-const {
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { KeyPair } from "@near-js/crypto";
+import { Account } from "@near-js/accounts";
+import { Near } from "@near-js/wallet-account";
+import { InMemoryKeyStore } from "@near-js/keystores";
+import {
   getAgendaFromAirtable,
   getAlertsFromAirtable,
   getAttendeeInfoFromAirtable,
-} = require("./airtableUtils");
+} from "./airtableUtils";
+
 const app = new Hono();
-import { cors } from "hono/cors";
 
 // Setup CORS
 const allowed_origins = [
@@ -25,6 +26,10 @@ app.use(
     allowedHeaders: ["Content-Type"],
   }),
 );
+
+export function getEnvVariable(name, env) {
+  return env[name];
+}
 
 function parseJwt(token) {
   try {
@@ -74,10 +79,10 @@ function shouldRetry(error) {
 }
 
 // Helper function to setup NEAR connection
-async function setupNear(context) {
-  const NETWORK = context.env.NETWORK;
-  const FACTORY_CONTRACT_ID = context.env.FACTORY_CONTRACT_ID;
-  const workerKey = KeyPair.fromString(context.env.WORKER_NEAR_SK);
+async function setupNear(env) {
+  const NETWORK = getEnvVariable("NETWORK", env);
+  const FACTORY_CONTRACT_ID = getEnvVariable("FACTORY_CONTRACT_ID", env);
+  const workerKey = KeyPair.fromString(getEnvVariable("WORKER_NEAR_SK", env));
 
   let keyStore = new InMemoryKeyStore();
   keyStore.setKey(NETWORK, FACTORY_CONTRACT_ID, workerKey);
@@ -148,14 +153,15 @@ const currentTasks = {
 };
 
 app.post("/webhook/:type", async (context) => {
+  const env = context.env;
   const { type } = context.req.param();
   console.log(`Received webhook of type: ${type}`);
   let macSecretBase64;
 
   if (type === "agenda") {
-    macSecretBase64 = context.env.AGENDA_MAC_SECRET_BASE64;
+    macSecretBase64 = getEnvVariable("AGENDA_MAC_SECRET_BASE64", env);
   } else if (type === "alerts") {
-    macSecretBase64 = context.env.ALERTS_MAC_SECRET_BASE64;
+    macSecretBase64 = getEnvVariable("ALERTS_MAC_SECRET_BASE64", env);
   } else {
     console.error("Invalid webhook type:", type);
     return context.json({ error: "Invalid webhook type" }, 400);
@@ -178,7 +184,7 @@ app.post("/webhook/:type", async (context) => {
     }
 
     // Create a new task
-    const task = createProcessingTask(context, type);
+    const task = createProcessingTask(env, type);
 
     // Store the task in the currentTasks object
     currentTasks[type] = task;
@@ -194,6 +200,7 @@ app.post("/webhook/:type", async (context) => {
 });
 
 app.get("/fetch-attendees", async (context) => {
+  const env = context.env;
   const authHeader = context.req.header("Authorization");
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -207,16 +214,22 @@ app.get("/fetch-attendees", async (context) => {
     const payload = parseJwt(idToken);
 
     // Verify the token
-    await verifyIdToken(idToken, payload, context.env.GOOGLE_CLIENT_ID);
+    await verifyIdToken(
+      idToken,
+      payload,
+      getEnvVariable("GOOGLE_CLIENT_ID", env),
+    );
 
     // Check if the email is an authorized admin
-    const authorizedAdmins = context.env.AUTHORIZED_ADMINS.split(",");
+    const authorizedAdmins = getEnvVariable("AUTHORIZED_ADMINS", env).split(
+      ",",
+    );
     if (!authorizedAdmins.includes(payload.email)) {
       return context.json({ error: "Access denied" }, 403);
     }
 
     // Fetch attendee data
-    const attendees = await getAttendeeInfoFromAirtable(context);
+    const attendees = await getAttendeeInfoFromAirtable(env);
     return context.json({ attendees });
   } catch (error) {
     console.error("Error verifying ID token:", error);
@@ -225,6 +238,7 @@ app.get("/fetch-attendees", async (context) => {
 });
 
 app.get("/fetch-admin-login", async (context) => {
+  const env = context.env;
   const authHeader = context.req.header("Authorization");
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -238,18 +252,24 @@ app.get("/fetch-admin-login", async (context) => {
     const payload = parseJwt(idToken);
 
     // Verify the token
-    await verifyIdToken(idToken, payload, context.env.GOOGLE_CLIENT_ID);
+    await verifyIdToken(
+      idToken,
+      payload,
+      getEnvVariable("GOOGLE_CLIENT_ID", env),
+    );
 
     // Check if the email is an authorized admin
-    const authorizedAdmins = context.env.AUTHORIZED_ADMINS.split(",");
+    const authorizedAdmins = getEnvVariable("AUTHORIZED_ADMINS", env).split(
+      ",",
+    );
     if (!authorizedAdmins.includes(payload.email)) {
       return context.json({ error: "Access denied" }, 403);
     }
 
     return context.json({
-      accountId: `admin.${context.env.FACTORY_CONTRACT_ID}`,
+      accountId: `admin.${getEnvVariable("FACTORY_CONTRACT_ID", env)}`,
       displayName: "admin",
-      secretKey: context.env.ADMIN_NEAR_SK,
+      secretKey: getEnvVariable("ADMIN_NEAR_SK", env),
     });
   } catch (error) {
     console.error("Error verifying ID token:", error);
@@ -341,7 +361,7 @@ async function verifySignature(idToken) {
 }
 
 // Helper function to create a processing task with a cancelable promise
-function createProcessingTask(context, type) {
+function createProcessingTask(env, type) {
   let cancel;
 
   const promise = new Promise((resolve, reject) => {
@@ -356,11 +376,11 @@ function createProcessingTask(context, type) {
       try {
         const timestamp = Date.now();
         if (type === "agenda") {
-          await handleAgendaUpdate(context, timestamp).catch((error) =>
+          await handleAgendaUpdate(env, timestamp).catch((error) =>
             console.error("Error handling agenda update:", error),
           );
         } else if (type === "alerts") {
-          await handleAlertsUpdate(context, timestamp).catch((error) =>
+          await handleAlertsUpdate(env, timestamp).catch((error) =>
             console.error("Error handling alerts update:", error),
           );
         }
@@ -388,12 +408,12 @@ const addTimestampIfMissing = (item, existingItem, timestamp) => {
 };
 
 // Handle agenda updates with retries
-async function handleAgendaUpdate(context, timestamp) {
+async function handleAgendaUpdate(env, timestamp) {
   try {
-    const workerAccount = await setupNear(context);
-    const factoryAccountId = context.env.FACTORY_CONTRACT_ID;
+    const workerAccount = await setupNear(env);
+    const factoryAccountId = getEnvVariable("FACTORY_CONTRACT_ID", env);
 
-    const newAgenda = await getAgendaFromAirtable(context);
+    const newAgenda = await getAgendaFromAirtable(env);
     console.log("New agenda from Airtable:", JSON.stringify(newAgenda));
 
     let agendaAtTimestamp = await retryWithBackoff(() =>
@@ -441,13 +461,13 @@ async function handleAgendaUpdate(context, timestamp) {
 }
 
 // Handle alerts updates with retries
-async function handleAlertsUpdate(context, timestamp) {
+async function handleAlertsUpdate(env, timestamp) {
   try {
     console.log("Starting alerts update...");
-    const workerAccount = await setupNear(context);
-    const factoryAccountId = context.env.FACTORY_CONTRACT_ID;
+    const workerAccount = await setupNear(env);
+    const factoryAccountId = getEnvVariable("FACTORY_CONTRACT_ID", env);
 
-    const newAlerts = await getAlertsFromAirtable(context);
+    const newAlerts = await getAlertsFromAirtable(env);
     console.log("New alerts from Airtable:", JSON.stringify(newAlerts));
 
     let alertAtTimestamp = await retryWithBackoff(() =>
@@ -494,4 +514,62 @@ async function handleAlertsUpdate(context, timestamp) {
   }
 }
 
-export default app;
+async function refreshAirtableWebhooks(env) {
+  console.log("Refreshing Airtable webhooks...", env);
+  const webhookIds = {
+    agenda: getEnvVariable("AGENDA_WEBHOOK_ID", env),
+    alerts: getEnvVariable("ALERTS_WEBHOOK_ID", env),
+  };
+
+  const baseId = getEnvVariable("AIRTABLE_BASE_ID", env);
+  const airtableApiKey = getEnvVariable("AIRTABLE_PERSONAL_ACCESS_TOKEN", env);
+
+  for (const [type, webhookId] of Object.entries(webhookIds)) {
+    try {
+      const response = await fetch(
+        `https://api.airtable.com/v0/bases/${baseId}/webhooks/${webhookId}/refresh`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${airtableApiKey}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+
+      if (!response.ok) {
+        console.error(
+          `Failed to refresh ${type} webhook. Status: ${response.status}`,
+        );
+        const errorText = await response.text();
+        console.error(`Error: ${errorText}`);
+        continue;
+      }
+
+      const data = await response.json();
+      const newExpiration = data.expirationTime;
+
+      console.log(
+        `Successfully refreshed ${type} webhook. New expiration: ${newExpiration}`,
+      );
+
+      // Optionally, store the new expiration time in KV storage or update environment variables
+    } catch (error) {
+      console.error(`Error refreshing ${type} webhook:`, error);
+    }
+  }
+}
+
+app.get("/test-scheduled", async (context) => {
+  await handleScheduledEvent(null, context.env, context.executionCtx);
+  return context.json({ message: "Scheduled function executed" });
+});
+
+async function handleScheduledEvent(event, env, ctx) {
+  await refreshAirtableWebhooks(env);
+}
+
+export default {
+  fetch: app.fetch,
+  scheduled: handleScheduledEvent,
+};

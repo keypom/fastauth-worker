@@ -8,11 +8,11 @@ delete_webhook() {
   local WEBHOOK_ID=$1
   local WEBHOOK_TYPE=$2
 
-  echo "Deleting old webhook $WEBHOOK_TYPE with ID: $WEBHOOK_ID"
+  echo "Deleting old webhook $WEBHOOK_TYPE with ID: $WEBHOOK_ID and PAT: $AIRTABLE_PERSONAL_ACCESS_TOKEN"
 
   # Delete the webhook
   RESPONSE=$(curl -s -X DELETE "https://api.airtable.com/v0/bases/$AIRTABLE_BASE_ID/webhooks/$WEBHOOK_ID" \
-    -H "Authorization: Bearer $AIRTABLE_PESONAL_ACCESS_TOKEN")
+    -H "Authorization: Bearer $AIRTABLE_PERSONAL_ACCESS_TOKEN")
 
   # Check the response to ensure deletion was successful
   if [ -z "$RESPONSE" ]; then
@@ -32,7 +32,7 @@ create_webhook() {
 
   # Create the new webhook
   RESPONSE=$(curl -s -X POST "https://api.airtable.com/v0/bases/$AIRTABLE_BASE_ID/webhooks" \
-    -H "Authorization: Bearer $AIRTABLE_PESONAL_ACCESS_TOKEN" \
+    -H "Authorization: Bearer $AIRTABLE_PERSONAL_ACCESS_TOKEN" \
     -H "Content-Type: application/json" \
     --data '{
       "notificationUrl": "'"$WEBHOOK_URL"'",

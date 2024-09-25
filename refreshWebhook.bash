@@ -12,7 +12,7 @@ refresh_webhook() {
 
   # Refresh the webhook
   RESPONSE=$(curl -s -X POST "https://api.airtable.com/v0/bases/$AIRTABLE_BASE_ID/webhooks/$WEBHOOK_ID/refresh" \
-    -H "Authorization: Bearer $AIRTABLE_PESONAL_ACCESS_TOKEN" \
+    -H "Authorization: Bearer $AIRTABLE_PERSONAL_ACCESS_TOKEN" \
     -H "Content-Type: application/json")
 
   # Extract the new expiration time from the response

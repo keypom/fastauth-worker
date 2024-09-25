@@ -1,9 +1,10 @@
-const Airtable = require("airtable");
+import Airtable from "airtable";
+import { getEnvVariable } from ".";
 
-async function getAgendaFromAirtable(context) {
+export async function getAgendaFromAirtable(env) {
   const base = new Airtable({
-    apiKey: context.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
-  }).base(context.env.AIRTABLE_BASE_ID);
+    apiKey: getEnvVariable("AIRTABLE_PERSONAL_ACCESS_TOKEN", env),
+  }).base(getEnvVariable("AIRTABLE_BASE_ID", env));
 
   return new Promise((resolve, reject) => {
     const agenda = [];
@@ -29,10 +30,10 @@ async function getAgendaFromAirtable(context) {
   });
 }
 
-async function getAlertsFromAirtable(context) {
+export async function getAlertsFromAirtable(env) {
   const base = new Airtable({
-    apiKey: context.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
-  }).base(context.env.AIRTABLE_BASE_ID);
+    apiKey: getEnvVariable("AIRTABLE_PERSONAL_ACCESS_TOKEN", env),
+  }).base(getEnvVariable("AIRTABLE_BASE_ID", env));
 
   return new Promise((resolve, reject) => {
     const alerts = [];
@@ -59,11 +60,10 @@ async function getAlertsFromAirtable(context) {
 }
 
 // New function to fetch Test Attendees
-async function getAttendeeInfoFromAirtable(context) {
-  console.log("Fetching Test Attendees from Airtable... ", context.env);
+export async function getAttendeeInfoFromAirtable(env) {
   const base = new Airtable({
-    apiKey: context.env.AIRTABLE_PERSONAL_ACCESS_TOKEN,
-  }).base(context.env.AIRTABLE_BASE_ID);
+    apiKey: getEnvVariable("AIRTABLE_PERSONAL_ACCESS_TOKEN", env),
+  }).base(getEnvVariable("AIRTABLE_BASE_ID", env));
 
   return new Promise((resolve, reject) => {
     const attendees = [];
@@ -88,9 +88,3 @@ async function getAttendeeInfoFromAirtable(context) {
       );
   });
 }
-
-module.exports = {
-  getAgendaFromAirtable,
-  getAlertsFromAirtable,
-  getAttendeeInfoFromAirtable,
-};
