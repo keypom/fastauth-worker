@@ -12,6 +12,8 @@ dist
 /out
 
 # misc
+.env.dev
+.env.production
 .DS_Store
 .env.local
 .env.development.local
