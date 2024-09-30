@@ -15,8 +15,8 @@ const app = new Hono();
 // Setup CORS
 const allowed_origins = [
   "http://localhost:5173",
-  "http://localhost:3000",
-  "http://localhost:3001",
+  "https://development.keypom-events-app.pages.dev",
+  "https://app.redactedbangkok.ai",
 ];
 app.use(
   "*",
