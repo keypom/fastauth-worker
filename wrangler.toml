@@ -4,6 +4,9 @@ node_compat = true
 main = "src/index.js"
 # compatibility_flags = [ "nodejs_compat"  ]
 
+[observability]
+enabled = true
+
 [env.production]
 [env.production.vars]
 ENVIRONMENT='development'
@@ -17,6 +20,7 @@ AGENDA_TABLE_ID='tblSzutUhYBOnYFC1'
 ALERTS_TABLE_ID='tblQUiJAARw6ns18Q'
 AGENDA_WEBHOOK_ID='achDNenHlwL29R3Ip'
 ALERTS_WEBHOOK_ID='achSNTl1eAMW5c52Z'
+enabled = true 
 [env.production.triggers]
 crons = ["0 0 * * *"]  # Every day at midnight
 
@@ -27,11 +31,12 @@ NETWORK='testnet'
 FIREWALL='FALSE'
 FACTORY_CONTRACT_ID='1727275535421-factory.testnet'
 AIRTABLE_BASE_ID='appQsBhe43rrhfa6S'
-AGENDA_EXPIRATION='2024-10-02T16:11:14.294Z'
-ALERTS_EXPIRATION='2024-10-02T16:11:14.671Z'
+AGENDA_EXPIRATION='2024-10-03T21:23:29.539Z'
+ALERTS_EXPIRATION='2024-10-03T21:23:29.903Z'
 AGENDA_TABLE_ID='tblSzutUhYBOnYFC1'
 ALERTS_TABLE_ID='tblQUiJAARw6ns18Q'
-AGENDA_WEBHOOK_ID='achDNenHlwL29R3Ip'
-ALERTS_WEBHOOK_ID='achSNTl1eAMW5c52Z'
+AGENDA_WEBHOOK_ID='achhJxpp8OBGwAOdz'
+ALERTS_WEBHOOK_ID='ach1jOLmeBZp7WfuO'
+enabled = true 
 [env.dev.triggers]
 crons = ["0 0 * * *"]  # Every day at midnight
