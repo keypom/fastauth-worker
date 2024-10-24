@@ -31,22 +31,24 @@ NETWORK='testnet'
 FIREWALL='FALSE'
 FACTORY_CONTRACT_ID='1729793502797-factory.testnet'
 
-AIRTABLE_AGENDA_ALERTS_BASE_ID='appUoqGEsl9XMmgvO'
+AIRTABLE_AGENDA_ALERTS_BASE_ID='appYz1vUD2mGO0GZE'
 AIRTABLE_ATTENDEE_BASE_ID='appQsBhe43rrhfa6S'
 
 AGENDA_VIEW_NAME='Benji Reminders'
 AGENDA_TABLE_NAME='Agenda'
+AGENDA_QUERY_FIELDS='Session Name,Confirmed Speakers,Confirmed Moderators,Location,Description,Format,Topic,⚙️ Start Time,⚙️ End Time,Reminder'
 
 ALERTS_VIEW_NAME='Grid view'
 ALERTS_TABLE_NAME='Alerts'
+ALERTS_QUERY_FIELDS='Title,Description,Custom Link Title,Redirects To,Duration (minutes)'
 
 ATTENDEE_VIEW_NAME='Grid view - Applied to Attend'
 ATTENDEE_TABLE_NAME='Applied to Attend'
 
-AGENDA_WEBHOOK_ID='achKNEVzOeAUrwTyF'
-ALERTS_WEBHOOK_ID='achPakKg2EOqc6hpJ'
-AGENDA_EXPIRATION='2024-10-31T18:22:54.907Z'
-ALERTS_EXPIRATION='2024-10-31T18:22:55.714Z'
+AGENDA_WEBHOOK_ID='achDDDesuNn4ifJsk'
+ALERTS_WEBHOOK_ID='achqTEsIIGfMpV5Bk'
+AGENDA_EXPIRATION='2024-10-31T20:23:37.520Z'
+ALERTS_EXPIRATION='2024-10-31T20:23:38.163Z'
 enabled = true 
 [env.dev.triggers]
 crons = ["0 0 * * *"]  # Every day at midnight

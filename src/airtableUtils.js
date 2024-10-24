@@ -6,11 +6,15 @@ export async function getAgendaFromAirtable(env) {
     apiKey: getEnvVariable("AIRTABLE_PERSONAL_ACCESS_TOKEN", env),
   }).base(getEnvVariable("AIRTABLE_AGENDA_ALERTS_BASE_ID", env));
 
+  // Read fields from environment variable and split into an array
+  const fields = getEnvVariable("AGENDA_QUERY_FIELDS", env).split(",");
+
   return new Promise((resolve, reject) => {
     const agenda = [];
     base(getEnvVariable("AGENDA_TABLE_NAME", env))
       .select({
         view: getEnvVariable("AGENDA_VIEW_NAME", env),
+        fields: fields,
       })
       .eachPage(
         (records, fetchNextPage) => {
@@ -35,11 +39,15 @@ export async function getAlertsFromAirtable(env) {
     apiKey: getEnvVariable("AIRTABLE_PERSONAL_ACCESS_TOKEN", env),
   }).base(getEnvVariable("AIRTABLE_AGENDA_ALERTS_BASE_ID", env));
 
+  // Read fields from environment variable and split into an array
+  const fields = getEnvVariable("ALERTS_QUERY_FIELDS", env).split(",");
+
   return new Promise((resolve, reject) => {
     const alerts = [];
     base(getEnvVariable("ALERTS_TABLE_NAME", env))
       .select({
         view: getEnvVariable("ALERTS_VIEW_NAME", env),
+        fields: fields,
       })
       .eachPage(
         (records, fetchNextPage) => {
