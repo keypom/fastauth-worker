@@ -403,6 +403,7 @@ async function handleAgendaUpdate(env, timestamp) {
     const factoryAccountId = getEnvVariable("FACTORY_CONTRACT_ID", env);
 
     const newAgenda = await getAgendaFromAirtable(env);
+    console.log("New agenda:", JSON.parse(newAgenda));
 
     let agendaAtTimestamp = await retryWithBackoff(() =>
       workerAccount.viewFunction({
@@ -425,17 +426,18 @@ async function handleAgendaUpdate(env, timestamp) {
         );
       });
 
-      await retryWithBackoff(() =>
-        workerAccount.functionCall({
-          contractId: factoryAccountId,
-          methodName: "set_agenda",
-          args: {
-            new_agenda: JSON.stringify(updatedAgenda),
-            timestamp,
-          },
-          gas: "30000000000000",
-          attachedDeposit: "0",
-        }),
+      await retryWithBackoff(
+        () => console.log("foo"),
+        //  workerAccount.functionCall({
+        //    contractId: factoryAccountId,
+        //    methodName: "set_agenda",
+        //    args: {
+        //      new_agenda: JSON.stringify(updatedAgenda),
+        //      timestamp,
+        //    },
+        //    gas: "30000000000000",
+        //    attachedDeposit: "0",
+        //  }),
       );
 
       console.log("Agenda updated successfully on NEAR.");
@@ -455,6 +457,7 @@ async function handleAlertsUpdate(env, timestamp) {
     const factoryAccountId = getEnvVariable("FACTORY_CONTRACT_ID", env);
 
     const newAlerts = await getAlertsFromAirtable(env);
+    console.log("New alerts:", newAlerts);
 
     let alertAtTimestamp = await retryWithBackoff(() =>
       workerAccount.viewFunction({
@@ -477,17 +480,18 @@ async function handleAlertsUpdate(env, timestamp) {
         );
       });
 
-      await retryWithBackoff(() =>
-        workerAccount.functionCall({
-          contractId: factoryAccountId,
-          methodName: "set_alerts",
-          args: {
-            new_alerts: JSON.stringify(updatedAlerts),
-            timestamp,
-          },
-          gas: "30000000000000",
-          attachedDeposit: "0",
-        }),
+      await retryWithBackoff(
+        () => console.log("foo"),
+        // workerAccount.functionCall({
+        //   contractId: factoryAccountId,
+        //   methodName: "set_alerts",
+        //   args: {
+        //     new_alerts: JSON.stringify(updatedAlerts),
+        //     timestamp,
+        //   },
+        //   gas: "30000000000000",
+        //   attachedDeposit: "0",
+        // }),
       );
 
       console.log("Alerts updated successfully on NEAR.");

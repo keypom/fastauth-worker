@@ -7,9 +7,9 @@ import nearJsWalletAccount from "@near-js/wallet-account";
 
 import dotenv from "dotenv";
 
-// Accept environment as a command-line argument
+// Accept environment and webhook type as command-line arguments
 const type = process.argv[2]; // 'agenda' or 'alerts'
-const ENVIRONMENT = process.argv[3] || "dev"; // 'dev' or 'production'
+const ENVIRONMENT = process.argv[3] || "dev"; // 'dev', 'production', or 'local'
 
 // Validate the webhook type
 if (!type || (type !== "agenda" && type !== "alerts")) {
@@ -18,14 +18,16 @@ if (!type || (type !== "agenda" && type !== "alerts")) {
 }
 
 // Validate the environment
-if (ENVIRONMENT !== "dev" && ENVIRONMENT !== "production") {
-  console.error("Invalid environment specified. Use 'dev' or 'production'.");
+if (!["dev", "production", "local"].includes(ENVIRONMENT)) {
+  console.error(
+    "Invalid environment specified. Use 'dev', 'production', or 'local'.",
+  );
   process.exit(1);
 }
 
 // Load the appropriate environment variables file
 dotenv.config({
-  path: ENVIRONMENT === "dev" ? ".dev.vars" : ".prod.vars",
+  path: ENVIRONMENT === "production" ? ".prod.vars" : ".dev.vars",
 });
 
 // Destructure necessary modules
@@ -47,6 +49,8 @@ if (ENVIRONMENT === "dev") {
   BASE_URL = "https://airtable-worker-dev.keypom.workers.dev";
 } else if (ENVIRONMENT === "production") {
   BASE_URL = "https://airtable-worker-prod.keypom.workers.dev";
+} else if (ENVIRONMENT === "local") {
+  BASE_URL = "http://localhost:8787";
 }
 
 // Set the Airtable Worker URL
@@ -61,7 +65,7 @@ function createHMACSignature(body, macSecretBase64) {
     .digest("hex");
 }
 
-// Helper function to send request to the Cloudflare Worker
+// Helper function to send request to the worker
 async function sendWebhook(type, macSecretBase64) {
   const url = `${AIRTABLE_WORKER_URL}${type}`;
   const body = JSON.stringify({}); // Empty body
@@ -79,7 +83,7 @@ async function sendWebhook(type, macSecretBase64) {
 
   const responseData = await response.json();
 
-  console.log(`Response from Cloudflare Worker (${type}):`, responseData);
+  console.log(`Response from worker (${type}):`, responseData);
 }
 
 // Helper function to setup NEAR connection
