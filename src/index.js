@@ -372,7 +372,7 @@ function createProcessingTask(env, type) {
 
     // Simulate a delay with setTimeout
     setTimeout(async () => {
-      console.log(`Processing the latest ${type} webhook after 5 seconds`);
+      console.log(`Processing the latest ${type} webhook after 2 seconds`);
       try {
         const timestamp = Date.now();
         if (type === "agenda") {
@@ -515,7 +515,7 @@ async function handleAlertsUpdate(env, timestamp) {
 }
 
 async function refreshAirtableWebhooks(env) {
-  console.log("Refreshing Airtable webhooks...", env);
+  console.log("Refreshing Airtable webhooks...");
   const webhookIds = {
     agenda: getEnvVariable("AGENDA_WEBHOOK_ID", env),
     alerts: getEnvVariable("ALERTS_WEBHOOK_ID", env),

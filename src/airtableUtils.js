@@ -59,7 +59,7 @@ export async function getAlertsFromAirtable(env) {
   });
 }
 
-// New function to fetch Test Attendees
+// Function to fetch attendee information
 export async function getAttendeeInfoFromAirtable(env) {
   const base = new Airtable({
     apiKey: getEnvVariable("AIRTABLE_PERSONAL_ACCESS_TOKEN", env),
