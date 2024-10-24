@@ -97,19 +97,16 @@ async function setupNear(env) {
   };
 
   let near = new Near(nearConfig);
-  console.log("NEAR connection established:", near);
   return new Account(near.connection, FACTORY_CONTRACT_ID);
 }
 
 // Helper function to verify HMAC using Web Crypto API
 async function verifyHMAC(request, macSecretBase64) {
   try {
-    console.log("Starting HMAC verification..., ", request);
     const macSecretDecoded = Uint8Array.from(atob(macSecretBase64), (c) =>
       c.charCodeAt(0),
     );
     const body = await request.text(); // Read the body as a string
-    console.log("Request body for HMAC verification:", body);
 
     const encoder = new TextEncoder();
     const key = await crypto.subtle.importKey(
@@ -131,15 +128,11 @@ async function verifyHMAC(request, macSecretBase64) {
       Array.from(new Uint8Array(signature))
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
-    console.log("HEADERS: ", request.header);
     const receivedHMAC = request.header("X-Airtable-Content-MAC");
-    console.log("RECEIVED HMAC: ", receivedHMAC);
-    console.log("Expected HMAC:", expectedHMAC);
 
     if (expectedHMAC !== receivedHMAC) {
       throw new Error("HMAC verification failed.");
     }
-    console.log("HMAC verification successful.");
   } catch (error) {
     console.error("Error verifying HMAC:", error);
     throw error; // Re-throw the error to be handled by the caller
@@ -286,10 +279,6 @@ async function verifyIdToken(idToken, payload, clientId) {
     throw new Error("Invalid issuer");
   }
 
-  // **Add these logs**
-  console.log("payload.aud:", payload.aud);
-  console.log("Expected clientId:", clientId);
-
   // Verify the audience
   if (Array.isArray(payload.aud)) {
     if (!payload.aud.includes(clientId)) {
@@ -414,7 +403,6 @@ async function handleAgendaUpdate(env, timestamp) {
     const factoryAccountId = getEnvVariable("FACTORY_CONTRACT_ID", env);
 
     const newAgenda = await getAgendaFromAirtable(env);
-    console.log("New agenda from Airtable:", JSON.stringify(newAgenda));
 
     let agendaAtTimestamp = await retryWithBackoff(() =>
       workerAccount.viewFunction({
@@ -424,7 +412,6 @@ async function handleAgendaUpdate(env, timestamp) {
     );
 
     let currentAgenda = JSON.parse(agendaAtTimestamp[0]);
-    console.log("Current agenda from NEAR:", currentAgenda);
 
     if (!deepEqual(newAgenda, currentAgenda)) {
       console.log("Agendas differ, updating blockchain...");
@@ -468,7 +455,6 @@ async function handleAlertsUpdate(env, timestamp) {
     const factoryAccountId = getEnvVariable("FACTORY_CONTRACT_ID", env);
 
     const newAlerts = await getAlertsFromAirtable(env);
-    console.log("New alerts from Airtable:", JSON.stringify(newAlerts));
 
     let alertAtTimestamp = await retryWithBackoff(() =>
       workerAccount.viewFunction({
@@ -478,7 +464,6 @@ async function handleAlertsUpdate(env, timestamp) {
     );
 
     let currentAlerts = JSON.parse(alertAtTimestamp[0]);
-    console.log("Current alerts from NEAR:", currentAlerts);
 
     if (!deepEqual(newAlerts, currentAlerts)) {
       console.log("Alerts differ, updating blockchain...");
