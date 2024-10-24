@@ -5,8 +5,10 @@
   "description": "A template for using stripe-node in a Cloudflare Worker",
   "scripts": {
     "dev": "wrangler dev src/index.js --env dev",
-    "dev-deploy": "./deploy.sh dev",
-    "production-deploy": "./deploy.sh production"
+    "deploy:dev": "./deploy.sh dev",
+    "deploy:prod": "./deploy.sh production",
+    "create:webhook:dev": "./cycleWebhook.sh dev",
+    "create:webhook:prod": "./cycleWebhook.sh production"
   },
   "author": "{{ authors }}",
   "license": "MIT",

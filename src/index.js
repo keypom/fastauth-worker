@@ -521,7 +521,7 @@ async function refreshAirtableWebhooks(env) {
     alerts: getEnvVariable("ALERTS_WEBHOOK_ID", env),
   };
 
-  const baseId = getEnvVariable("AIRTABLE_BASE_ID", env);
+  const baseId = getEnvVariable("AIRTABLE_AGENDA_ALERTS_BASE_ID", env);
   const airtableApiKey = getEnvVariable("AIRTABLE_PERSONAL_ACCESS_TOKEN", env);
 
   for (const [type, webhookId] of Object.entries(webhookIds)) {

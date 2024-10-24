@@ -4,13 +4,13 @@ import { getEnvVariable } from ".";
 export async function getAgendaFromAirtable(env) {
   const base = new Airtable({
     apiKey: getEnvVariable("AIRTABLE_PERSONAL_ACCESS_TOKEN", env),
-  }).base(getEnvVariable("AIRTABLE_BASE_ID", env));
+  }).base(getEnvVariable("AIRTABLE_AGENDA_ALERTS_BASE_ID", env));
 
   return new Promise((resolve, reject) => {
     const agenda = [];
-    base("Agenda")
+    base(getEnvVariable("AGENDA_TABLE_NAME", env))
       .select({
-        view: "Grid view",
+        view: getEnvVariable("AGENDA_VIEW_NAME", env),
       })
       .eachPage(
         (records, fetchNextPage) => {
@@ -33,13 +33,13 @@ export async function getAgendaFromAirtable(env) {
 export async function getAlertsFromAirtable(env) {
   const base = new Airtable({
     apiKey: getEnvVariable("AIRTABLE_PERSONAL_ACCESS_TOKEN", env),
-  }).base(getEnvVariable("AIRTABLE_BASE_ID", env));
+  }).base(getEnvVariable("AIRTABLE_AGENDA_ALERTS_BASE_ID", env));
 
   return new Promise((resolve, reject) => {
     const alerts = [];
-    base("Alerts")
+    base(getEnvVariable("ALERTS_TABLE_NAME", env))
       .select({
-        view: "Grid view",
+        view: getEnvVariable("ALERTS_VIEW_NAME", env),
       })
       .eachPage(
         (records, fetchNextPage) => {
@@ -63,13 +63,13 @@ export async function getAlertsFromAirtable(env) {
 export async function getAttendeeInfoFromAirtable(env) {
   const base = new Airtable({
     apiKey: getEnvVariable("AIRTABLE_PERSONAL_ACCESS_TOKEN", env),
-  }).base(getEnvVariable("AIRTABLE_BASE_ID", env));
+  }).base(getEnvVariable("AIRTABLE_ATTENDEE_BASE_ID", env));
 
   return new Promise((resolve, reject) => {
     const attendees = [];
-    base("Applied to Attend")
+    base(getEnvVariable("ATTENDEE_TABLE_NAME", env))
       .select({
-        view: "Grid view - Applied to Attend",
+        view: getEnvVariable("ATTENDEE_VIEW_NAME", env),
       })
       .eachPage(
         (records, fetchNextPage) => {

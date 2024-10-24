@@ -14,6 +14,7 @@ dist
 # misc
 .env.dev
 .env.production
+.prod.vars
 .DS_Store
 .env.local
 .env.development.local
