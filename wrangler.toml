@@ -27,9 +27,10 @@ crons = ["0 0 * * *"]  # Every day at midnight
 [env.dev]
 [env.dev.vars]
 ENVIRONMENT='development'
+ENABLED='TRUE'
 NETWORK='testnet'
 FIREWALL='FALSE'
-FACTORY_CONTRACT_ID='1729793502797-factory.testnet'
+FACTORY_CONTRACT_ID='1729883347621-factory.testnet'
 
 AIRTABLE_AGENDA_ALERTS_BASE_ID='appYz1vUD2mGO0GZE'
 AIRTABLE_ATTENDEE_BASE_ID='appQsBhe43rrhfa6S'
@@ -45,10 +46,10 @@ ALERTS_QUERY_FIELDS='Title,Description,Custom Link Title,Redirects To,Duration (
 ATTENDEE_VIEW_NAME='Grid view - Applied to Attend'
 ATTENDEE_TABLE_NAME='Applied to Attend'
 
-AGENDA_WEBHOOK_ID='achjtcaaiegOmOjwN'
-ALERTS_WEBHOOK_ID='achHcHcWEqDNIRlgS'
-AGENDA_EXPIRATION='2024-11-01T00:53:03.727Z'
-ALERTS_EXPIRATION='2024-11-01T00:53:04.488Z'
+AGENDA_WEBHOOK_ID='achOTNydVxs686VqE'
+ALERTS_WEBHOOK_ID='achBxFtx8mAt7NuVr'
+AGENDA_EXPIRATION='2024-11-01T01:38:27.772Z'
+ALERTS_EXPIRATION='2024-11-01T01:38:28.525Z'
 enabled = true 
 [env.dev.triggers]
 crons = ["0 0 * * *"]  # Every day at midnight

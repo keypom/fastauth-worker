@@ -1,22 +1,36 @@
 #!/bin/bash
 
 # Accept environment as an argument
-ENVIRONMENT=$1  # Accept 'dev' or 'production' as an argument
+ENVIRONMENT=$1  # Accept 'dev' or 'prod' as an argument
+
+# Debugging: Output the received argument
+echo "Input ENVIRONMENT argument: '$ENVIRONMENT'"
 
 if [ -z "$ENVIRONMENT" ]; then
-  echo "Please specify an environment: 'dev' or 'production'"
+  echo "Please specify an environment: 'dev' or 'prod'"
   exit 1
 fi
 
-# Load environment variables from the appropriate file
+# Normalize the environment variable to lowercase
+ENVIRONMENT=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
+
+# Debugging: Output normalized environment
+echo "Normalized ENVIRONMENT: $ENVIRONMENT"
+
+# Load environment variables from the appropriate file based on environment
 if [ "$ENVIRONMENT" == "dev" ]; then
   ENV_FILE=".dev.vars"
-elif [ "$ENVIRONMENT" == "production" ]; then
+  BASE_URL="https://airtable-worker-dev.keypom.workers.dev"
+elif [ "$ENVIRONMENT" == "prod" ] || [ "$ENVIRONMENT" == "production" ]; then
   ENV_FILE=".prod.vars"
+  BASE_URL="https://airtable-worker-prod.keypom.workers.dev"
 else
-  echo "Invalid environment specified. Use 'dev' or 'production'."
+  echo "Invalid environment specified. Use 'dev' or 'prod'."
   exit 1
 fi
+
+# Debugging: Output which env file will be used
+echo "Using environment variables from: $ENV_FILE"
 
 # Check if the env file exists
 if [ ! -f "$ENV_FILE" ]; then
@@ -26,6 +40,8 @@ fi
 
 # Load the current environment variables from the appropriate vars file
 source "$ENV_FILE"
+
+echo "Base URL being used: $BASE_URL"
 
 # Function to delete a webhook
 delete_webhook() {
@@ -117,13 +133,6 @@ create_webhook() {
 
   echo "$WEBHOOK_TYPE webhook details updated in $ENV_FILE."
 }
-
-# Set the base URL depending on the environment
-if [ "$ENVIRONMENT" == "dev" ]; then
-  BASE_URL="https://airtable-worker-dev.keypom.workers.dev"
-else
-  BASE_URL="https://airtable-worker-prod.keypom.workers.dev"
-fi
 
 # Delete the old webhooks
 delete_webhook "$AGENDA_WEBHOOK_ID" "AGENDA"

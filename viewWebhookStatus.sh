@@ -11,7 +11,7 @@ ENVIRONMENT=$1
 # Load the appropriate environment variables
 if [ "$ENVIRONMENT" == "dev" ]; then
   ENV_FILE=".dev.vars"
-elif [ "$ENVIRONMENT" == "production" ]; then
+elif [ "$ENVIRONMENT" == "production" ] || [ "$ENVIRONMENT" == "prod" ]; then
   ENV_FILE=".prod.vars"
 else
   echo "Invalid environment specified. Use 'dev' or 'prod'."
@@ -44,15 +44,10 @@ check_webhook_status() {
     -H "Authorization: Bearer $AIRTABLE_PERSONAL_ACCESS_TOKEN" \
     -H "Content-Type: application/json")
 
-  # Uncomment the following lines if you want to see the raw response
-  # echo "Raw Response:"
-  # echo "$RESPONSE"
-  # echo "----------------------------------------"
-
+  # Check if the response is valid JSON
   if echo "$RESPONSE" | jq . >/dev/null 2>&1; then
-    # The response is valid JSON
+    # Check for errors in the response
     if echo "$RESPONSE" | jq -e '.error' >/dev/null 2>&1; then
-      # An error is present in the response
       error_message=$(echo "$RESPONSE" | jq -r '.error.message')
       printf "$webhook_name Webhook ID: $webhook_id - Status: \e[31mError\e[0m\n"
       echo "Error Details: $error_message"
@@ -63,8 +58,28 @@ check_webhook_status() {
         printf "$webhook_name Webhook ID: $webhook_id - Status: \e[31mNot Found\e[0m\n"
       else
         expiration_time=$(echo "$webhook" | jq -r '.expirationTime')
+        notification_url=$(echo "$webhook" | jq -r '.notificationUrl')
+        record_change_scope=$(echo "$webhook" | jq -r '.specification.options.filters.recordChangeScope')
+
+        # Get the table name from the record_change_scope
+        TABLE_ID=$record_change_scope
+        TABLE_NAME="Unknown"
+        if [ "$TABLE_ID" != "null" ] && [ -n "$TABLE_ID" ]; then
+          # Fetch table metadata to get the table name
+          TABLE_INFO=$(curl -s -X GET "https://api.airtable.com/v0/meta/bases/$AIRTABLE_AGENDA_ALERTS_BASE_ID/tables/$TABLE_ID" \
+            -H "Authorization: Bearer $AIRTABLE_PERSONAL_ACCESS_TOKEN")
+
+          if echo "$TABLE_INFO" | jq . >/dev/null 2>&1; then
+            TABLE_NAME=$(echo "$TABLE_INFO" | jq -r '.name')
+          else
+            TABLE_NAME="Unknown (Failed to retrieve table name)"
+          fi
+        fi
+
         printf "$webhook_name Webhook ID: $webhook_id - Status: \e[32mActive\e[0m\n"
         echo "Expiration Time: $expiration_time"
+        echo "Notification URL: $notification_url"
+        echo "Watching Table: $TABLE_NAME (ID: $TABLE_ID)"
       fi
     fi
   else

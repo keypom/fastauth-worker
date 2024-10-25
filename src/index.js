@@ -170,6 +170,12 @@ app.post("/webhook/:type", async (context) => {
       200,
     );
 
+    const isWorkerEnabled = getEnvVariable("ENABLED", env);
+    if (isWorkerEnabled !== "TRUE") {
+      console.log(`Worker is disabled, returning early for ${type} webhook`);
+      return response;
+    }
+
     // If there is an ongoing task, cancel it by rejecting its Promise
     if (currentTasks[type]) {
       console.log(`Cancelling existing task for ${type} webhook`);
