@@ -73,7 +73,7 @@ create_webhook() {
   echo "Found table ID for $TABLE_NAME: $TABLE_ID"
 
   # Create the new webhook
-  RESPONSE=$(curl -s -X POST "https://api.airtable.com/v0/bases/$AIRTABLE_AGENDA_ALERTS_BASE_ID/webhooks" \
+  CREATION_RESPONSE=$(curl -s -X POST "https://api.airtable.com/v0/bases/$AIRTABLE_AGENDA_ALERTS_BASE_ID/webhooks" \
     -H "Authorization: Bearer $AIRTABLE_PERSONAL_ACCESS_TOKEN" \
     -H "Content-Type: application/json" \
     --data '{
@@ -88,33 +88,34 @@ create_webhook() {
       }
     }')
 
-  # Extract the ID, MAC secret, and expiration time from the response
-  NEW_WEBHOOK_ID=$(echo "$RESPONSE" | jq -r '.id')
-  MAC_SECRET=$(echo "$RESPONSE" | jq -r '.macSecretBase64')
-  EXPIRATION=$(echo "$RESPONSE" | jq -r '.expirationTime')
+  # Extract the webhook ID and other details from the response
+  WEBHOOK_ID=$(echo "$CREATION_RESPONSE" | jq -r '.id')
+  MAC_SECRET=$(echo "$CREATION_RESPONSE" | jq -r '.macSecretBase64')
+  EXPIRATION=$(echo "$CREATION_RESPONSE" | jq -r '.expirationTime')
 
-  if [ "$NEW_WEBHOOK_ID" != "null" ] && [ -n "$NEW_WEBHOOK_ID" ]; then
-    echo "$WEBHOOK_TYPE webhook created successfully. ID: $NEW_WEBHOOK_ID, Expiration: $EXPIRATION"
-
-    # Update the vars file
-    echo "Updating $ENV_FILE with new webhook details for $WEBHOOK_TYPE..."
-
-    # Use temporary file for safer write
-    tmp_file=$(mktemp)
-    cp "$ENV_FILE" "$tmp_file"
-
-    # Update the webhook details using sed
-    sed -i'' -e "s|^${WEBHOOK_TYPE}_WEBHOOK_ID=.*|${WEBHOOK_TYPE}_WEBHOOK_ID='$NEW_WEBHOOK_ID'|" "$tmp_file"
-    sed -i'' -e "s|^${WEBHOOK_TYPE}_MAC_SECRET_BASE64=.*|${WEBHOOK_TYPE}_MAC_SECRET_BASE64='$MAC_SECRET'|" "$tmp_file"
-    sed -i'' -e "s|^${WEBHOOK_TYPE}_EXPIRATION=.*|${WEBHOOK_TYPE}_EXPIRATION='$EXPIRATION'|" "$tmp_file"
-
-    # Replace the original vars file with the updated one
-    mv "$tmp_file" "$ENV_FILE"
-
-    echo "$WEBHOOK_TYPE webhook details updated in $ENV_FILE."
-  else
-    echo "Failed to create webhook for $WEBHOOK_TYPE. Response: $RESPONSE"
+  if [ "$WEBHOOK_ID" == "null" ] || [ -z "$WEBHOOK_ID" ]; then
+    echo "Failed to create webhook for $WEBHOOK_TYPE. Response: $CREATION_RESPONSE"
+    exit 1
   fi
+
+  echo "$WEBHOOK_TYPE webhook created successfully. ID: $WEBHOOK_ID, Expiration: $EXPIRATION"
+
+  # Update the vars file
+  echo "Updating $ENV_FILE with new webhook details for $WEBHOOK_TYPE..."
+
+  # Use temporary file for safer write
+  tmp_file=$(mktemp)
+  cp "$ENV_FILE" "$tmp_file"
+
+  # Update the webhook details using sed
+  sed -i'' -e "s|^${WEBHOOK_TYPE}_WEBHOOK_ID=.*|${WEBHOOK_TYPE}_WEBHOOK_ID='$WEBHOOK_ID'|" "$tmp_file"
+  sed -i'' -e "s|^${WEBHOOK_TYPE}_MAC_SECRET_BASE64=.*|${WEBHOOK_TYPE}_MAC_SECRET_BASE64='$MAC_SECRET'|" "$tmp_file"
+  sed -i'' -e "s|^${WEBHOOK_TYPE}_EXPIRATION=.*|${WEBHOOK_TYPE}_EXPIRATION='$EXPIRATION'|" "$tmp_file"
+
+  # Replace the original vars file with the updated one
+  mv "$tmp_file" "$ENV_FILE"
+
+  echo "$WEBHOOK_TYPE webhook details updated in $ENV_FILE."
 }
 
 # Set the base URL depending on the environment

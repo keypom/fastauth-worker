@@ -12,6 +12,8 @@
     "ping:alerts:dev": "node ./ping.js alerts dev",
     "ping:alerts:prod": "node ./ping.js alerts production",
     "ping:alerts:local": "node ./ping.js alerts local",
+    "ping:webhooks:dev": "./viewWebhookStatus.sh dev",
+    "ping:webhooks:prod": "./viewWebhookStatus.sh production",
     "deploy:dev": "./deploy.sh dev",
     "deploy:prod": "./deploy.sh production",
     "create:webhook:dev": "./cycleWebhook.sh dev",
