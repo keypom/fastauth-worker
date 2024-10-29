@@ -164,6 +164,25 @@ app.post("/webhook/:type", async (context) => {
     await verifyHMAC(context.req, macSecretBase64);
     console.log(`HMAC verification succeeded for ${type} webhook`);
 
+    // Read the request body as JSON
+    const bodyText = await context.req.text();
+    const body = JSON.parse(bodyText);
+
+    // Check if the 'changes' array is empty
+    if (
+      !body.payload ||
+      !body.payload.changes ||
+      body.payload.changes.length === 0
+    ) {
+      console.log(
+        `Received sync message for ${type} webhook. No action required.`,
+      );
+      return context.json(
+        { message: "Sync message received. No action taken." },
+        200,
+      );
+    }
+
     // Immediately return 200 OK to Airtable
     const response = context.json(
       { message: "HMAC verified, processing webhook" },

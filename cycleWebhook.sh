@@ -23,7 +23,7 @@ if [ "$ENVIRONMENT" == "dev" ]; then
   BASE_URL="https://airtable-worker-dev.keypom.workers.dev"
 elif [ "$ENVIRONMENT" == "prod" ] || [ "$ENVIRONMENT" == "production" ]; then
   ENV_FILE=".prod.vars"
-  BASE_URL="https://airtable-worker-prod.keypom.workers.dev"
+  BASE_URL="https://airtable-worker-production.keypom.workers.dev"
 else
   echo "Invalid environment specified. Use 'dev' or 'prod'."
   exit 1

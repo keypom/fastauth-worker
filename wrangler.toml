@@ -10,16 +10,29 @@ enabled = true
 [env.production]
 [env.production.vars]
 ENVIRONMENT='production'
+ENABLED='FALSE'
 NETWORK='mainnet'
 FIREWALL='FALSE'
-FACTORY_CONTRACT_ID=''
-AIRTABLE_BASE_ID='appQsBhe43rrhfa6S'
-AGENDA_EXPIRATION='2024-10-02T16:11:14.294Z'
-ALERTS_EXPIRATION='2024-10-02T16:11:14.671Z'
-AGENDA_TABLE_ID='tblSzutUhYBOnYFC1'
-ALERTS_TABLE_ID='tblQUiJAARw6ns18Q'
-AGENDA_WEBHOOK_ID='achDNenHlwL29R3Ip'
-ALERTS_WEBHOOK_ID='achSNTl1eAMW5c52Z'
+FACTORY_CONTRACT_ID='redacted2024.near'
+
+AIRTABLE_AGENDA_ALERTS_BASE_ID='appEWARd5vZ6JoMNm'
+AIRTABLE_ATTENDEE_BASE_ID='appdLXQkwmt4rqtW0'
+
+AGENDA_VIEW_NAME='Benji Reminders'
+AGENDA_TABLE_NAME='Agenda'
+AGENDA_QUERY_FIELDS='Session Name,Confirmed Speakers,Confirmed Moderators,Location,Description,Format,Topic,⚙️ Start Time,⚙️ End Time,Reminder'
+
+ALERTS_VIEW_NAME='Grid view'
+ALERTS_TABLE_NAME='Alerts'
+ALERTS_QUERY_FIELDS='Title,Description,Custom Link Title,Redirects To,Duration (minutes)'
+
+ATTENDEE_VIEW_NAME='Grid view - Applied to Attend'
+ATTENDEE_TABLE_NAME='Applied to Attend'
+
+AGENDA_WEBHOOK_ID='achhOBLjms5lFtHVw'
+ALERTS_WEBHOOK_ID='achjMeca9i39u7wJf'
+AGENDA_EXPIRATION='2024-11-05T18:49:41.371Z'
+ALERTS_EXPIRATION='2024-11-05T18:49:42.192Z'
 enabled = true 
 [env.production.triggers]
 crons = ["0 0 * * *"]  # Every day at midnight
