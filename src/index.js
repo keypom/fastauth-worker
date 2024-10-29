@@ -167,21 +167,7 @@ app.post("/webhook/:type", async (context) => {
     // Read the request body as JSON
     const bodyText = await context.req.text();
     const body = JSON.parse(bodyText);
-
-    // Check if the 'changes' array is empty
-    if (
-      !body.payload ||
-      !body.payload.changes ||
-      body.payload.changes.length === 0
-    ) {
-      console.log(
-        `Received sync message for ${type} webhook. No action required.`,
-      );
-      return context.json(
-        { message: "Sync message received. No action taken." },
-        200,
-      );
-    }
+    console.log(`Received ${type} webhook:`, body);
 
     // Immediately return 200 OK to Airtable
     const response = context.json(
@@ -408,9 +394,94 @@ function createProcessingTask(env, type) {
   return { promise, cancel };
 }
 
-const deepEqual = (obj1, obj2) => {
-  return JSON.stringify(obj1) === JSON.stringify(obj2);
-};
+function deepEqual(obj1, obj2, ignoreKeys = [], path = "") {
+  if (obj1 === obj2) return true; // Handle primitives and reference equality
+
+  if (obj1 == null || obj2 == null) {
+    console.log(`Difference at ${path}: One of the values is null`);
+    return false;
+  }
+
+  if (typeof obj1 !== typeof obj2) {
+    console.log(
+      `Difference at ${path}: Types differ (${typeof obj1} vs ${typeof obj2})`,
+    );
+    return false;
+  }
+
+  if (typeof obj1 !== "object") {
+    console.log(`Difference at ${path}: Values differ (${obj1} vs ${obj2})`);
+    return false;
+  }
+
+  // Check if both are arrays
+  const isArray1 = Array.isArray(obj1);
+  const isArray2 = Array.isArray(obj2);
+
+  if (isArray1 !== isArray2) {
+    console.log(`Difference at ${path}: One is array, one is object`);
+    return false;
+  }
+
+  if (isArray1 && isArray2) {
+    if (obj1.length !== obj2.length) {
+      console.log(
+        `Difference at ${path}: Array lengths differ (${obj1.length} vs ${obj2.length})`,
+      );
+      return false;
+    }
+    for (let i = 0; i < obj1.length; i++) {
+      if (!deepEqual(obj1[i], obj2[i], ignoreKeys, `${path}[${i}]`))
+        return false;
+    }
+    return true;
+  }
+
+  // Both are objects
+  const keys1 = Object.keys(obj1).filter((key) => !ignoreKeys.includes(key));
+  const keys2 = Object.keys(obj2).filter((key) => !ignoreKeys.includes(key));
+
+  // Check for extra keys in obj1
+  for (let key of keys1) {
+    if (!keys2.includes(key)) {
+      console.log(
+        `Difference at ${path}: Key '${key}' missing in second object`,
+      );
+      return false;
+    }
+  }
+
+  // Check for extra keys in obj2
+  for (let key of keys2) {
+    if (!keys1.includes(key)) {
+      console.log(
+        `Difference at ${path}: Key '${key}' missing in first object`,
+      );
+      return false;
+    }
+  }
+
+  for (let key of keys1) {
+    if (
+      !deepEqual(
+        obj1[key],
+        obj2[key],
+        ignoreKeys,
+        path ? `${path}.${key}` : key,
+      )
+    )
+      return false;
+  }
+
+  return true;
+}
+
+function sortAgenda(agenda) {
+  return agenda.slice().sort((a, b) => {
+    // Assuming each item has a unique identifier, e.g., 'Session Name'
+    return a["Session Name"].localeCompare(b["Session Name"]);
+  });
+}
 
 const addTimestampIfMissing = (item, existingItem, timestamp) => {
   if (!existingItem.Time) {
@@ -421,7 +492,6 @@ const addTimestampIfMissing = (item, existingItem, timestamp) => {
   return item;
 };
 
-// Handle agenda updates with retries
 async function handleAgendaUpdate(env, timestamp) {
   try {
     const workerAccount = await setupNear(env);
@@ -438,11 +508,15 @@ async function handleAgendaUpdate(env, timestamp) {
 
     let currentAgenda = JSON.parse(agendaAtTimestamp[0]);
 
-    if (!deepEqual(newAgenda, currentAgenda)) {
+    // Sort agendas to ensure consistent order
+    const newAgendaSorted = sortAgenda(newAgenda);
+    const currentAgendaSorted = sortAgenda(currentAgenda);
+
+    if (!deepEqual(newAgendaSorted, currentAgendaSorted, ["Time"])) {
       console.log("Agendas differ, updating blockchain...");
 
-      const updatedAgenda = newAgenda.map((newItem, index) => {
-        const existingItem = currentAgenda[index] || {};
+      const updatedAgenda = newAgendaSorted.map((newItem, index) => {
+        const existingItem = currentAgendaSorted[index] || {};
         return addTimestampIfMissing(
           newItem,
           existingItem,
