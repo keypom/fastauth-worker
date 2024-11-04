@@ -6,6 +6,7 @@
   "description": "A template for using stripe-node in a Cloudflare Worker",
   "scripts": {
     "dev": "wrangler dev src/index.js --env dev",
+    "ping:healthcheck": "node ./healthCheck.js",
     "ping:agenda:dev": "node ./ping.js agenda dev",
     "ping:agenda:prod": "node ./ping.js agenda production",
     "ping:agenda:local": "node ./ping.js agenda local",
