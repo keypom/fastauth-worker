@@ -478,8 +478,9 @@ function deepEqual(obj1, obj2, ignoreKeys = [], path = "") {
 
 function sortAgenda(agenda) {
   return agenda.slice().sort((a, b) => {
-    // Assuming each item has a unique identifier, e.g., 'Session Name'
-    return a["Session Name"].localeCompare(b["Session Name"]);
+    const sessionNameA = a["Session Name"] || "";
+    const sessionNameB = b["Session Name"] || "";
+    return sessionNameA.localeCompare(sessionNameB);
   });
 }
 

@@ -48,7 +48,7 @@ let BASE_URL;
 if (ENVIRONMENT === "dev") {
   BASE_URL = "https://airtable-worker-dev.keypom.workers.dev";
 } else if (ENVIRONMENT === "production") {
-  BASE_URL = "https://airtable-worker-prod.keypom.workers.dev";
+  BASE_URL = "https://airtable-worker-production.keypom.workers.dev";
 } else if (ENVIRONMENT === "local") {
   BASE_URL = "http://localhost:8787";
 }
