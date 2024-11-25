@@ -1,6 +1,6 @@
 {
   "private": true,
-  "name": "airtable-worker",
+  "name": "fastauth-worker",
   "version": "1.0.0",
   "type": "module",
   "description": "A template for using stripe-node in a Cloudflare Worker",
@@ -36,6 +36,7 @@
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
     "dotenv": "^16.4.5",
+    "ethers": "^6.13.4",
     "events": "^3.3.0",
     "events-polyfill": "^2.1.2",
     "helia": "^4.0.1",

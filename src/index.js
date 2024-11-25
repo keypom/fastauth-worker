@@ -1,36 +1,22 @@
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import { KeyPair } from "@near-js/crypto";
 import { Account } from "@near-js/accounts";
 import { Near } from "@near-js/wallet-account";
+import { cors } from "hono/cors";
 import { InMemoryKeyStore } from "@near-js/keystores";
-import {
-  getAgendaFromAirtable,
-  getAlertsFromAirtable,
-  getAttendeeInfoFromAirtable,
-} from "./airtableUtils";
+import { parseNearAmount } from "@near-js/utils";
+import { deriveEthAddressFromMpcKey } from "./mpc";
 
 const app = new Hono();
 
-// Setup CORS
-const allowed_origins = [
-  "http://localhost:5173",
-  "https://development.keypom-events-app.pages.dev",
-  "https://app.redactedbangkok.ai",
-];
 app.use(
   "*",
   cors({
-    origin: allowed_origins,
-    methods: ["GET", "POST", "HEAD"],
-    allowedHeaders: ["Content-Type"],
+    origin: "http://localhost:3000",
   }),
 );
 
-export function getEnvVariable(name, env) {
-  return env[name];
-}
-
+// Parse JWT function
 function parseJwt(token) {
   try {
     const base64Url = token.split(".")[1];
@@ -51,279 +37,17 @@ function parseJwt(token) {
   }
 }
 
-// Retry helper with exponential backoff
-async function retryWithBackoff(fn, retries = 5, backoff = 1000) {
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      return await fn(); // Try executing the function
-    } catch (error) {
-      if (attempt === retries || !shouldRetry(error)) {
-        throw error; // Rethrow the error if we've reached max retries or it's not retryable
-      }
-      console.warn(`Attempt ${attempt} failed. Retrying in ${backoff}ms...`);
-      await new Promise((resolve) => setTimeout(resolve, backoff)); // Wait before retrying
-      backoff *= 2; // Exponential backoff
-    }
-  }
-}
-
-// Helper function to determine if error is retryable
-function shouldRetry(error) {
-  if (error.code === "ECONNRESET" || error.code === "ETIMEDOUT") {
-    return true; // Retry on network errors
-  }
-  if (error.response && error.response.status === 429) {
-    return true; // Retry on rate limiting
-  }
-  return false; // Don't retry on other errors
-}
-
-// Helper function to setup NEAR connection
-async function setupNear(env) {
-  const NETWORK = getEnvVariable("NETWORK", env);
-  const FACTORY_CONTRACT_ID = getEnvVariable("FACTORY_CONTRACT_ID", env);
-  const workerKey = KeyPair.fromString(getEnvVariable("WORKER_NEAR_SK", env));
-
-  let keyStore = new InMemoryKeyStore();
-  keyStore.setKey(NETWORK, FACTORY_CONTRACT_ID, workerKey);
-
-  let nearConfig = {
-    networkId: NETWORK,
-    keyStore: keyStore,
-    nodeUrl: `https://rpc.${NETWORK}.near.org`,
-    walletUrl: `https://wallet.${NETWORK}.near.org`,
-    helperUrl: `https://helper.${NETWORK}.near.org`,
-    explorerUrl: `https://explorer.${NETWORK}.near.org`,
-  };
-
-  let near = new Near(nearConfig);
-  return new Account(near.connection, FACTORY_CONTRACT_ID);
-}
-
-// Helper function to verify HMAC using Web Crypto API
-async function verifyHMAC(request, macSecretBase64) {
-  try {
-    const macSecretDecoded = Uint8Array.from(atob(macSecretBase64), (c) =>
-      c.charCodeAt(0),
-    );
-    const body = await request.text(); // Read the body as a string
-
-    const encoder = new TextEncoder();
-    const key = await crypto.subtle.importKey(
-      "raw",
-      macSecretDecoded,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
-    );
-
-    const signature = await crypto.subtle.sign(
-      "HMAC",
-      key,
-      encoder.encode(body),
-    );
-
-    const expectedHMAC =
-      "hmac-sha256=" +
-      Array.from(new Uint8Array(signature))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-    const receivedHMAC = request.header("X-Airtable-Content-MAC");
-
-    if (expectedHMAC !== receivedHMAC) {
-      throw new Error("HMAC verification failed.");
-    }
-  } catch (error) {
-    console.error("Error verifying HMAC:", error);
-    throw error; // Re-throw the error to be handled by the caller
-  }
-}
-
-// Global state to store timers for each webhook type
-const currentTasks = {
-  agenda: null,
-  alerts: null,
-};
-
-app.post("/webhook/:type", async (context) => {
-  const env = context.env;
-  const { type } = context.req.param();
-  console.log(`Received webhook of type: ${type}`);
-  let macSecretBase64;
-
-  if (type === "agenda") {
-    macSecretBase64 = getEnvVariable("AGENDA_MAC_SECRET_BASE64", env);
-  } else if (type === "alerts") {
-    macSecretBase64 = getEnvVariable("ALERTS_MAC_SECRET_BASE64", env);
-  } else {
-    console.error("Invalid webhook type:", type);
-    return context.json({ error: "Invalid webhook type" }, 400);
-  }
-
-  try {
-    await verifyHMAC(context.req, macSecretBase64);
-    console.log(`HMAC verification succeeded for ${type} webhook`);
-
-    // Read the request body as JSON
-    const bodyText = await context.req.text();
-    const body = JSON.parse(bodyText);
-    console.log(`Received ${type} webhook:`, body);
-
-    // Immediately return 200 OK to Airtable
-    const response = context.json(
-      { message: "HMAC verified, processing webhook" },
-      200,
-    );
-
-    const isWorkerEnabled = getEnvVariable("ENABLED", env);
-    if (isWorkerEnabled !== "TRUE") {
-      console.log(`Worker is disabled, returning early for ${type} webhook`);
-      return response;
-    }
-
-    // If there is an ongoing task, cancel it by rejecting its Promise
-    if (currentTasks[type]) {
-      console.log(`Cancelling existing task for ${type} webhook`);
-      currentTasks[type].cancel(); // Call the cancel function if it exists
-    }
-
-    // Create a new task
-    const task = createProcessingTask(env, type);
-
-    // Store the task in the currentTasks object
-    currentTasks[type] = task;
-
-    // Ensure the worker keeps running until the task is finished
-    context.executionCtx.waitUntil(task.promise);
-
-    return response; // Finalize the response to Airtable
-  } catch (error) {
-    console.error(`Error verifying HMAC for ${type} webhook:`, error);
-    return context.json({ error: "Invalid HMAC signature" }, 403);
-  }
-});
-
-app.get("/fetch-attendees", async (context) => {
-  const env = context.env;
-  const authHeader = context.req.header("Authorization");
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return context.json({ error: "Unauthorized" }, 401);
-  }
-
-  const idToken = authHeader.substring(7); // Remove 'Bearer ' prefix
-
-  try {
-    // Decode the ID token
-    const payload = parseJwt(idToken);
-
-    // Verify the token
-    await verifyIdToken(
-      idToken,
-      payload,
-      getEnvVariable("GOOGLE_CLIENT_ID", env),
-    );
-
-    // Check if the email is an authorized admin
-    const authorizedAdmins = getEnvVariable("AUTHORIZED_ADMINS", env).split(
-      ",",
-    );
-    if (!authorizedAdmins.includes(payload.email)) {
-      return context.json({ error: "Access denied" }, 403);
-    }
-
-    // Fetch attendee data
-    const attendees = await getAttendeeInfoFromAirtable(env);
-    return context.json({ attendees });
-  } catch (error) {
-    console.error("Error verifying ID token:", error);
-    return context.json({ error: "Invalid or expired token" }, 401);
-  }
-});
-
-app.get("/fetch-admin-login", async (context) => {
-  const env = context.env;
-  const authHeader = context.req.header("Authorization");
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return context.json({ error: "Unauthorized" }, 401);
-  }
-
-  const idToken = authHeader.substring(7); // Remove 'Bearer ' prefix
-
-  try {
-    // Decode the ID token
-    const payload = parseJwt(idToken);
-
-    // Verify the token
-    await verifyIdToken(
-      idToken,
-      payload,
-      getEnvVariable("GOOGLE_CLIENT_ID", env),
-    );
-
-    // Check if the email is an authorized admin
-    const authorizedAdmins = getEnvVariable("AUTHORIZED_ADMINS", env).split(
-      ",",
-    );
-    if (!authorizedAdmins.includes(payload.email)) {
-      return context.json({ error: "Access denied" }, 403);
-    }
-
-    return context.json({
-      accountId: `admin.${getEnvVariable("FACTORY_CONTRACT_ID", env)}`,
-      displayName: "admin",
-      secretKey: getEnvVariable("ADMIN_NEAR_SK", env),
-    });
-  } catch (error) {
-    console.error("Error verifying ID token:", error);
-    return context.json({ error: "Invalid or expired token" }, 401);
-  }
-});
-
-async function verifyIdToken(idToken, payload, clientId) {
-  // Verify the issuer
-  if (
-    payload.iss !== "https://accounts.google.com" &&
-    payload.iss !== "accounts.google.com"
-  ) {
-    throw new Error("Invalid issuer");
-  }
-
-  // Verify the audience
-  if (Array.isArray(payload.aud)) {
-    if (!payload.aud.includes(clientId)) {
-      throw new Error("Invalid audience");
-    }
-  } else {
-    if (payload.aud !== clientId) {
-      throw new Error("Invalid audience");
-    }
-  }
-
-  // Verify the expiration
-  const now = Math.floor(Date.now() / 1000);
-  if (payload.exp < now) {
-    throw new Error("Token expired");
-  }
-
-  // Verify the signature using Google's public keys
-  const valid = await verifySignature(idToken);
-  if (!valid) {
-    throw new Error("Invalid token signature");
-  }
-}
-
-// Function to verify the token's signature
+// Verify ID token signature
 async function verifySignature(idToken) {
   // Fetch Google's public keys
   const response = await fetch("https://www.googleapis.com/oauth2/v3/certs");
   const { keys } = await response.json();
 
   // Parse the JWT header to get the key ID (kid)
-  const header = JSON.parse(
-    atob(idToken.split(".")[0].replace(/-/g, "+").replace(/_/g, "/")),
-  );
+  const headerBase64Url = idToken.split(".")[0];
+  const headerBase64 = headerBase64Url.replace(/-/g, "+").replace(/_/g, "/");
+  const header = JSON.parse(atob(headerBase64));
+
   const key = keys.find((k) => k.kid === header.kid);
 
   if (!key) {
@@ -360,302 +84,172 @@ async function verifySignature(idToken) {
   return valid;
 }
 
-// Helper function to create a processing task with a cancelable promise
-function createProcessingTask(env, type) {
-  let cancel;
+// Verify ID token
+async function verifyIdToken(idToken, clientId) {
+  // Decode the payload
+  const payload = parseJwt(idToken);
+  console.log("payload", payload);
+  console.log("clientId", clientId);
 
-  const promise = new Promise((resolve, reject) => {
-    cancel = () => {
-      console.log(`Task for ${type} webhook canceled.`);
-      reject(new Error(`Task for ${type} canceled`));
-    };
-
-    // Simulate a delay with setTimeout
-    setTimeout(async () => {
-      console.log(`Processing the latest ${type} webhook after 2 seconds`);
-      try {
-        const timestamp = Date.now();
-        if (type === "agenda") {
-          await handleAgendaUpdate(env, timestamp).catch((error) =>
-            console.error("Error handling agenda update:", error),
-          );
-        } else if (type === "alerts") {
-          await handleAlertsUpdate(env, timestamp).catch((error) =>
-            console.error("Error handling alerts update:", error),
-          );
-        }
-        resolve(); // Resolve the promise if successful
-      } catch (error) {
-        reject(error); // Reject the promise if an error occurs
-      }
-    }, 2000); // Wait for 2 seconds before processing
-  });
-
-  return { promise, cancel };
-}
-
-function deepEqual(obj1, obj2, ignoreKeys = [], path = "") {
-  if (obj1 === obj2) return true; // Handle primitives and reference equality
-
-  if (obj1 == null || obj2 == null) {
-    console.log(`Difference at ${path}: One of the values is null`);
-    return false;
+  if (!clientId) {
+    console.error("clientId is undefined");
+    throw new Error("Server configuration error: clientId is undefined");
   }
 
-  if (typeof obj1 !== typeof obj2) {
-    console.log(
-      `Difference at ${path}: Types differ (${typeof obj1} vs ${typeof obj2})`,
-    );
-    return false;
+  // Verify the issuer
+  if (
+    payload.iss !== "https://accounts.google.com" &&
+    payload.iss !== "accounts.google.com"
+  ) {
+    throw new Error("Invalid issuer");
   }
 
-  if (typeof obj1 !== "object") {
-    console.log(`Difference at ${path}: Values differ (${obj1} vs ${obj2})`);
-    return false;
-  }
-
-  // Check if both are arrays
-  const isArray1 = Array.isArray(obj1);
-  const isArray2 = Array.isArray(obj2);
-
-  if (isArray1 !== isArray2) {
-    console.log(`Difference at ${path}: One is array, one is object`);
-    return false;
-  }
-
-  if (isArray1 && isArray2) {
-    if (obj1.length !== obj2.length) {
-      console.log(
-        `Difference at ${path}: Array lengths differ (${obj1.length} vs ${obj2.length})`,
-      );
-      return false;
+  // Verify the audience
+  if (Array.isArray(payload.aud)) {
+    if (!payload.aud.includes(clientId)) {
+      throw new Error("Invalid audience");
     }
-    for (let i = 0; i < obj1.length; i++) {
-      if (!deepEqual(obj1[i], obj2[i], ignoreKeys, `${path}[${i}]`))
-        return false;
-    }
-    return true;
-  }
-
-  // Both are objects
-  const keys1 = Object.keys(obj1).filter((key) => !ignoreKeys.includes(key));
-  const keys2 = Object.keys(obj2).filter((key) => !ignoreKeys.includes(key));
-
-  // Check for extra keys in obj1
-  for (let key of keys1) {
-    if (!keys2.includes(key)) {
-      console.log(
-        `Difference at ${path}: Key '${key}' missing in second object`,
-      );
-      return false;
-    }
-  }
-
-  // Check for extra keys in obj2
-  for (let key of keys2) {
-    if (!keys1.includes(key)) {
-      console.log(
-        `Difference at ${path}: Key '${key}' missing in first object`,
-      );
-      return false;
-    }
-  }
-
-  for (let key of keys1) {
-    if (
-      !deepEqual(
-        obj1[key],
-        obj2[key],
-        ignoreKeys,
-        path ? `${path}.${key}` : key,
-      )
-    )
-      return false;
-  }
-
-  return true;
-}
-
-function sortAgenda(agenda) {
-  return agenda.slice().sort((a, b) => {
-    const sessionNameA = a["Session Name"] || "";
-    const sessionNameB = b["Session Name"] || "";
-    return sessionNameA.localeCompare(sessionNameB);
-  });
-}
-
-const addTimestampIfMissing = (item, existingItem, timestamp) => {
-  if (!existingItem.Time) {
-    item.Time = timestamp; // Add timestamp to the blockchain data only if it doesn't exist
   } else {
-    item.Time = existingItem.Time; // Preserve the existing timestamp
-  }
-  return item;
-};
-
-async function handleAgendaUpdate(env, timestamp) {
-  try {
-    const workerAccount = await setupNear(env);
-    const factoryAccountId = getEnvVariable("FACTORY_CONTRACT_ID", env);
-
-    const newAgenda = await getAgendaFromAirtable(env);
-
-    let agendaAtTimestamp = await retryWithBackoff(() =>
-      workerAccount.viewFunction({
-        contractId: factoryAccountId,
-        methodName: "get_agenda",
-      }),
-    );
-
-    let currentAgenda = JSON.parse(agendaAtTimestamp[0]);
-
-    // Sort agendas to ensure consistent order
-    const newAgendaSorted = sortAgenda(newAgenda);
-    const currentAgendaSorted = sortAgenda(currentAgenda);
-
-    if (!deepEqual(newAgendaSorted, currentAgendaSorted, ["Time"])) {
-      console.log("Agendas differ, updating blockchain...");
-
-      const updatedAgenda = newAgendaSorted.map((newItem, index) => {
-        const existingItem = currentAgendaSorted[index] || {};
-        return addTimestampIfMissing(
-          newItem,
-          existingItem,
-          new Date().toISOString(),
-        );
-      });
-
-      await retryWithBackoff(() =>
-        workerAccount.functionCall({
-          contractId: factoryAccountId,
-          methodName: "set_agenda",
-          args: {
-            new_agenda: JSON.stringify(updatedAgenda),
-            timestamp,
-          },
-          gas: "30000000000000",
-          attachedDeposit: "0",
-        }),
-      );
-
-      console.log("Agenda updated successfully on NEAR.");
-    } else {
-      console.log("No changes to the agenda.");
+    if (payload.aud !== clientId) {
+      throw new Error("Invalid audience");
     }
-  } catch (error) {
-    console.error("Error updating agenda:", error);
   }
+
+  // Verify the expiration
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.exp < now) {
+    throw new Error("Token expired");
+  }
+
+  // Verify the signature using Google's public keys
+  const valid = await verifySignature(idToken);
+  if (!valid) {
+    throw new Error("Invalid token signature");
+  }
+
+  return payload; // Return the payload (contains 'sub' which is the user ID)
 }
 
-// Handle alerts updates with retries
-async function handleAlertsUpdate(env, timestamp) {
-  try {
-    console.log("Starting alerts update...");
-    const workerAccount = await setupNear(env);
-    const factoryAccountId = getEnvVariable("FACTORY_CONTRACT_ID", env);
+// Helper function to setup NEAR connection
+async function setupNear(env) {
+  const NETWORK = env.NETWORK;
+  const ORACLE_ACCOUNT_ID = env.ORACLE_ACCOUNT_ID;
+  const ORACLE_ACCOUNT_PRIVATE_KEY = env.ORACLE_ACCOUNT_PRIVATE_KEY;
 
-    const newAlerts = await getAlertsFromAirtable(env);
-    console.log("New alerts:", newAlerts);
+  console.log("Setting up NEAR with NETWORK:", NETWORK);
+  console.log("ORACLE_ACCOUNT_ID:", ORACLE_ACCOUNT_ID);
 
-    let alertAtTimestamp = await retryWithBackoff(() =>
-      workerAccount.viewFunction({
-        contractId: factoryAccountId,
-        methodName: "get_alerts",
-      }),
-    );
+  const keyStore = new InMemoryKeyStore();
+  const keyPair = KeyPair.fromString(ORACLE_ACCOUNT_PRIVATE_KEY);
+  keyStore.setKey(NETWORK, ORACLE_ACCOUNT_ID, keyPair);
 
-    let currentAlerts = JSON.parse(alertAtTimestamp[0]);
-
-    if (!deepEqual(newAlerts, currentAlerts)) {
-      console.log("Alerts differ, updating blockchain...");
-
-      const updatedAlerts = newAlerts.map((newItem, index) => {
-        const existingItem = currentAlerts[index] || {};
-        return addTimestampIfMissing(
-          newItem,
-          existingItem,
-          new Date().toISOString(),
-        );
-      });
-
-      await retryWithBackoff(() =>
-        workerAccount.functionCall({
-          contractId: factoryAccountId,
-          methodName: "set_alerts",
-          args: {
-            new_alerts: JSON.stringify(updatedAlerts),
-            timestamp,
-          },
-          gas: "30000000000000",
-          attachedDeposit: "0",
-        }),
-      );
-
-      console.log("Alerts updated successfully on NEAR.");
-    } else {
-      console.log("No changes to the alerts.");
-    }
-  } catch (error) {
-    console.error("Error updating alerts:", error);
-  }
-}
-
-async function refreshAirtableWebhooks(env) {
-  console.log("Refreshing Airtable webhooks...");
-  const webhookIds = {
-    agenda: getEnvVariable("AGENDA_WEBHOOK_ID", env),
-    alerts: getEnvVariable("ALERTS_WEBHOOK_ID", env),
+  const nearConfig = {
+    networkId: NETWORK,
+    keyStore,
+    nodeUrl: `https://rpc.${NETWORK}.near.org`,
+    walletUrl: `https://wallet.${NETWORK}.near.org`,
+    helperUrl: `https://helper.${NETWORK}.near.org`,
+    explorerUrl: `https://explorer.${NETWORK}.near.org`,
   };
 
-  const baseId = getEnvVariable("AIRTABLE_AGENDA_ALERTS_BASE_ID", env);
-  const airtableApiKey = getEnvVariable("AIRTABLE_PERSONAL_ACCESS_TOKEN", env);
+  const near = new Near(nearConfig);
+  const account = new Account(near.connection, ORACLE_ACCOUNT_ID);
+  console.log("Account created");
+  return account;
+}
 
-  for (const [type, webhookId] of Object.entries(webhookIds)) {
-    try {
-      const response = await fetch(
-        `https://api.airtable.com/v0/bases/${baseId}/webhooks/${webhookId}/refresh`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${airtableApiKey}`,
-            "Content-Type": "application/json",
-          },
-        },
-      );
+app.post("/add-session-key", async (context) => {
+  const env = context.env;
 
-      if (!response.ok) {
-        console.error(
-          `Failed to refresh ${type} webhook. Status: ${response.status}`,
-        );
-        const errorText = await response.text();
-        console.error(`Error: ${errorText}`);
-        continue;
-      }
+  try {
+    const { req } = context;
+    const body = await req.json();
 
-      const data = await response.json();
-      const newExpiration = data.expirationTime;
+    const { idToken, publicKey } = body;
 
-      console.log(
-        `Successfully refreshed ${type} webhook. New expiration: ${newExpiration}`,
-      );
-
-      // Optionally, store the new expiration time in KV storage or update environment variables
-    } catch (error) {
-      console.error(`Error refreshing ${type} webhook:`, error);
+    if (!idToken || !publicKey) {
+      return context.json({ error: "Missing idToken or publicKey" }, 400);
     }
+
+    // Verify the ID token
+    const clientId = env.GOOGLE_CLIENT_ID;
+    const payload = await verifyIdToken(idToken, clientId);
+
+    const googleUserId = payload.sub;
+
+    // Hash the Google User ID
+    const encoder = new TextEncoder();
+    const data = encoder.encode(googleUserId);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const userIdHash = hashArray
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    // Now call the NEAR contract's add_session_key method
+    const account = await setupNear(env);
+
+    const FASTAUTH_CONTRACT_ID = env.FASTAUTH_CONTRACT_ID;
+    const MPC_CONTRACT_ID = env.MPC_CONTRACT_ID;
+
+    // Call the contract method
+    console.log("Calling function add_session_key with user ID:", userIdHash);
+
+    const path = userIdHash;
+    let userBundle = await account.viewFunction({
+      contractId: FASTAUTH_CONTRACT_ID,
+      methodName: "get_bundle",
+      args: {
+        path,
+      },
+    });
+
+    if (!userBundle) {
+      const mpcKey = await account.viewFunction({
+        contractId: MPC_CONTRACT_ID,
+        methodName: "derived_public_key",
+        args: {
+          path,
+          predecessor: FASTAUTH_CONTRACT_ID,
+        },
+      });
+      const ethImplicitAccountId = deriveEthAddressFromMpcKey(mpcKey);
+      account.functionCall({
+        contractId: FASTAUTH_CONTRACT_ID,
+        methodName: "activate_account",
+        args: {
+          mpc_key: mpcKey,
+          eth_address: ethImplicitAccountId,
+          path,
+        },
+        gas: "30000000000000",
+        attachedDeposit: parseNearAmount("0.1"),
+      });
+    }
+
+    try {
+      account.functionCall({
+        contractId: FASTAUTH_CONTRACT_ID,
+        methodName: "add_session_key",
+        args: {
+          path,
+          public_key: publicKey.toString(),
+        },
+        gas: "30000000000000",
+        attachedDeposit: parseNearAmount("0.1"),
+      });
+    } catch (err) {
+      console.error("Error during account.functionCall:", err.stack || err);
+      throw err;
+    }
+
+    return context.json({ success: true });
+  } catch (error) {
+    console.error("Error in /add-session-key:", error.stack || error);
+    return context.json({ error: error.message }, 500);
   }
-}
-
-app.get("/test-scheduled", async (context) => {
-  await handleScheduledEvent(null, context.env, context.executionCtx);
-  return context.json({ message: "Scheduled function executed" });
 });
-
-async function handleScheduledEvent(event, env, ctx) {
-  await refreshAirtableWebhooks(env);
-}
 
 export default {
   fetch: app.fetch,
-  scheduled: handleScheduledEvent,
 };

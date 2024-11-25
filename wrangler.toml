@@ -1,4 +1,4 @@
-name = "airtable-worker"
+name = "fastauth-worker"
 compatibility_date = "2023-01-01"
 node_compat = true
 main = "src/index.js"
@@ -9,60 +9,16 @@ enabled = true
 
 [env.production]
 [env.production.vars]
-ENVIRONMENT='production'
-ENABLED='FALSE'
-NETWORK='mainnet'
+ENVIRONMENT='development'
+NETWORK='testnet'
 FIREWALL='FALSE'
-FACTORY_CONTRACT_ID='redacted2024.near'
-
-AIRTABLE_AGENDA_ALERTS_BASE_ID='appEWARd5vZ6JoMNm'
-AIRTABLE_ATTENDEE_BASE_ID='appdLXQkwmt4rqtW0'
-
-AGENDA_VIEW_NAME='Benji Reminders'
-AGENDA_TABLE_NAME='Agenda'
-AGENDA_QUERY_FIELDS='Session Name,Confirmed Speakers,Confirmed Moderators,Location,Description,Format,Topic,⚙️ Start Time,⚙️ End Time,Reminder'
-
-ALERTS_VIEW_NAME='Grid view'
-ALERTS_TABLE_NAME='Alerts'
-ALERTS_QUERY_FIELDS='Title,Description,Custom Link Title,Redirects To,Duration (minutes)'
-
-ATTENDEE_VIEW_NAME='Grid view - Applied to Attend'
-ATTENDEE_TABLE_NAME='Applied to Attend'
-
-AGENDA_WEBHOOK_ID='achhOBLjms5lFtHVw'
-ALERTS_WEBHOOK_ID='achjMeca9i39u7wJf'
-AGENDA_EXPIRATION='2024-11-05T18:49:41.371Z'
-ALERTS_EXPIRATION='2024-11-05T18:49:42.192Z'
-enabled = true 
-[env.production.triggers]
-crons = ["0 0 * * *"]  # Every day at midnight
+FASTAUTH_CONTRACT_ID='1732136407269-fastauth.testnet'
 
 [env.dev]
 [env.dev.vars]
 ENVIRONMENT='development'
-ENABLED='TRUE'
 NETWORK='testnet'
 FIREWALL='FALSE'
-FACTORY_CONTRACT_ID='1730317152765-factory.testnet'
-
-AIRTABLE_AGENDA_ALERTS_BASE_ID='appYz1vUD2mGO0GZE'
-AIRTABLE_ATTENDEE_BASE_ID='appQsBhe43rrhfa6S'
-
-AGENDA_VIEW_NAME='Benji Reminders'
-AGENDA_TABLE_NAME='Agenda'
-AGENDA_QUERY_FIELDS='Session Name,Confirmed Speakers,Confirmed Moderators,Location,Description,Format,Topic,⚙️ Start Time,⚙️ End Time,Reminder'
-
-ALERTS_VIEW_NAME='Grid view'
-ALERTS_TABLE_NAME='Alerts'
-ALERTS_QUERY_FIELDS='Title,Description,Custom Link Title,Redirects To,Duration (minutes)'
-
-ATTENDEE_VIEW_NAME='Grid view - Applied to Attend'
-ATTENDEE_TABLE_NAME='Applied to Attend'
-
-AGENDA_WEBHOOK_ID='achOTNydVxs686VqE'
-ALERTS_WEBHOOK_ID='achBxFtx8mAt7NuVr'
-AGENDA_EXPIRATION='2024-11-01T01:38:27.772Z'
-ALERTS_EXPIRATION='2024-11-01T01:38:28.525Z'
-enabled = true 
-[env.dev.triggers]
-crons = ["0 0 * * *"]  # Every day at midnight
+FASTAUTH_CONTRACT_ID='1732554241156-fastauth.testnet'
+ORACLE_ACCOUNT_ID='fastauth-oracle-1.testnet'
+MPC_CONTRACT_ID='v1.signer-prod.testnet'
