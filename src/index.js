@@ -146,7 +146,7 @@ async function setupNear(env) {
   const nearConfig = {
     networkId: NETWORK,
     keyStore,
-    nodeUrl: `https://rpc.${NETWORK}.near.org`,
+    nodeUrl: `https://g.w.lavanet.xyz:443/gateway/neart/rpc-http/f653c33afd2ea30614f69bc1c73d4940`,
     walletUrl: `https://wallet.${NETWORK}.near.org`,
     helperUrl: `https://helper.${NETWORK}.near.org`,
     explorerUrl: `https://explorer.${NETWORK}.near.org`,
@@ -154,7 +154,6 @@ async function setupNear(env) {
 
   const near = new Near(nearConfig);
   const account = new Account(near.connection, ORACLE_ACCOUNT_ID);
-  console.log("Account created");
   return account;
 }
 
@@ -165,10 +164,13 @@ app.post("/add-session-key", async (context) => {
     const { req } = context;
     const body = await req.json();
 
-    const { idToken, publicKey } = body;
+    const { idToken, sessionPublicKey } = body;
 
-    if (!idToken || !publicKey) {
-      return context.json({ error: "Missing idToken or publicKey" }, 400);
+    if (!idToken || !sessionPublicKey) {
+      return context.json(
+        { error: "Missing idToken or sessionPublicKey" },
+        400,
+      );
     }
 
     // Verify the ID token
@@ -203,6 +205,7 @@ app.post("/add-session-key", async (context) => {
         path,
       },
     });
+    console.log("userBundle", userBundle);
 
     if (!userBundle) {
       const mpcKey = await account.viewFunction({
@@ -213,8 +216,10 @@ app.post("/add-session-key", async (context) => {
           predecessor: FASTAUTH_CONTRACT_ID,
         },
       });
+      console.log("mpcKey", mpcKey);
       const ethImplicitAccountId = deriveEthAddressFromMpcKey(mpcKey);
-      account.functionCall({
+      console.log("ethImplicitAccountId", ethImplicitAccountId);
+      const res = await account.functionCall({
         contractId: FASTAUTH_CONTRACT_ID,
         methodName: "activate_account",
         args: {
@@ -225,15 +230,16 @@ app.post("/add-session-key", async (context) => {
         gas: "30000000000000",
         attachedDeposit: parseNearAmount("0.1"),
       });
+      console.log("Account activated: ", res);
     }
 
     try {
-      account.functionCall({
+      await account.functionCall({
         contractId: FASTAUTH_CONTRACT_ID,
         methodName: "add_session_key",
         args: {
           path,
-          public_key: publicKey.toString(),
+          public_key: sessionPublicKey.toString(),
         },
         gas: "30000000000000",
         attachedDeposit: parseNearAmount("0.1"),
@@ -246,6 +252,55 @@ app.post("/add-session-key", async (context) => {
     return context.json({ success: true });
   } catch (error) {
     console.error("Error in /add-session-key:", error.stack || error);
+    return context.json({ error: error.message }, 500);
+  }
+});
+
+app.post("/sign-txn", async (context) => {
+  const env = context.env;
+
+  try {
+    const { req } = context;
+    const body = await req.json();
+
+    const { signature, payload, sessionKey } = body;
+
+    if (!signature || !payload || !sessionKey) {
+      return context.json({ error: "Missing signature, payload, or " }, 400);
+    }
+
+    // Verify the signature using the session key
+    const sessionKeyPair = KeyPair.fromString(sessionKey);
+    const payloadBytes = Buffer.from(JSON.stringify(payload));
+    const signatureBytes = Buffer.from(signature, "base64");
+
+    const isValid = sessionKeyPair.verify(payloadBytes, signatureBytes);
+
+    if (!isValid) {
+      return context.json({ error: "Invalid signature" }, 400);
+    }
+
+    // Reconstruct the transaction
+    // Use the account to call the contract method
+    const account = await setupNear(env);
+
+    const FASTAUTH_CONTRACT_ID = env.FASTAUTH_CONTRACT_ID;
+    // Prepare function call
+    const result = await account.functionCall({
+      contractId: FASTAUTH_CONTRACT_ID,
+      methodName: "call_near_contract",
+      args: {
+        signature,
+        payload,
+        session_key: sessionKeyPair.getPublicKey().toString(),
+      },
+      gas: BigInt("300000000000000"),
+      attachedDeposit: BigInt(0),
+    });
+
+    return context.json({ success: true, executionOutcome: result });
+  } catch (error) {
+    console.error("Error in /sign-transaction:", error.stack || error);
     return context.json({ error: error.message }, 500);
   }
 });
