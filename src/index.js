@@ -182,7 +182,8 @@ app.post("/sign-txn", async (context) => {
 
     // Determine the attached deposit
     let attachedDeposit = BigInt(0);
-    if (SHOULD_COVER_DEPOSITS) {
+    if (SHOULD_COVER_DEPOSITS === "TRUE") {
+      console.log("Covering attached deposit...");
       attachedDeposit = extractDepositFromPayload(payload);
     }
 

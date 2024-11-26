@@ -128,6 +128,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Add a helper function to extract deposit amount from the payload
 export function extractDepositFromPayload(payload) {
+  console.log("payload:", payload);
   if (payload?.action?.FunctionCall) {
     return BigInt(payload.action.FunctionCall.deposit || 0);
   } else if (payload?.action?.Transfer) {
