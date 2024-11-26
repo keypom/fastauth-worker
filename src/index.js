@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { KeyPair } from "@near-js/crypto";
-import { cors } from "hono/cors";
 import { parseNearAmount } from "@near-js/utils";
 import { deriveEthAddressFromMpcKey } from "./utils/mpc";
 import { contractCall, setupNear } from "./utils/near";
@@ -8,15 +7,43 @@ import { userIdFromAuth, verifyIdToken } from "./utils/auth";
 
 const app = new Hono();
 
-app.use(
-  "*",
-  cors({
-    origin: "http://localhost:3000",
-  }),
-);
-
-app.post("/add-session-key", async (context) => {
+// CORS middleware for `/verify-id-token` only
+const corsMiddleware = async (context, next) => {
   const env = context.env;
+  const authOrigin = env.AUTH_ORIGIN;
+  const requestOrigin = context.req.header("Origin");
+
+  if (requestOrigin === authOrigin) {
+    context.res.headers.set("Access-Control-Allow-Origin", requestOrigin);
+    context.res.headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    context.res.headers.set(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization",
+    );
+    context.res.headers.set("Access-Control-Allow-Credentials", "true");
+  }
+
+  if (context.req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: context.res.headers,
+    });
+  }
+
+  await next();
+};
+
+// `/verify-id-token` with CORS
+app.use("/verify-id-token", corsMiddleware);
+
+app.post("/verify-id-token", async (context) => {
+  const env = context.env;
+  const authOrigin = env.AUTH_ORIGIN;
+
+  const requestOrigin = context.req.header("Origin");
+  if (requestOrigin !== authOrigin) {
+    return context.json({ error: "Unauthorized" }, 403);
+  }
 
   try {
     const { req } = context;
@@ -42,9 +69,7 @@ app.post("/add-session-key", async (context) => {
     const FASTAUTH_CONTRACT_ID = env.FASTAUTH_CONTRACT_ID;
     const MPC_CONTRACT_ID = env.MPC_CONTRACT_ID;
 
-    // Call the contract method
-    console.log("Calling function add_session_key with user ID:", userIdHash);
-
+    // Check if the user has a bundle; if not, activate the account
     const path = userIdHash;
     let userBundle = await account.viewFunction({
       contractId: FASTAUTH_CONTRACT_ID,
@@ -53,7 +78,6 @@ app.post("/add-session-key", async (context) => {
         path,
       },
     });
-    console.log("userBundle", userBundle);
 
     if (!userBundle) {
       const mpcKey = await account.viewFunction({
@@ -64,10 +88,10 @@ app.post("/add-session-key", async (context) => {
           predecessor: FASTAUTH_CONTRACT_ID,
         },
       });
-      console.log("mpcKey", mpcKey);
+
       const ethImplicitAccountId = deriveEthAddressFromMpcKey(mpcKey);
-      console.log("ethImplicitAccountId", ethImplicitAccountId);
-      const res = await account.functionCall({
+
+      await account.functionCall({
         contractId: FASTAUTH_CONTRACT_ID,
         methodName: "activate_account",
         args: {
@@ -78,34 +102,46 @@ app.post("/add-session-key", async (context) => {
         gas: "30000000000000",
         attachedDeposit: parseNearAmount("0.1"),
       });
-      console.log("Account activated: ", res);
     }
 
-    try {
-      await account.functionCall({
-        contractId: FASTAUTH_CONTRACT_ID,
-        methodName: "add_session_key",
-        args: {
-          path,
-          public_key: sessionPublicKey.toString(),
-        },
-        gas: "30000000000000",
-        attachedDeposit: parseNearAmount("0.1"),
-      });
-    } catch (err) {
-      console.error("Error during account.functionCall:", err.stack || err);
-      throw err;
-    }
+    // Add the session key
+    await account.functionCall({
+      contractId: FASTAUTH_CONTRACT_ID,
+      methodName: "add_session_key",
+      args: {
+        path,
+        public_key: sessionPublicKey,
+      },
+      gas: "30000000000000",
+      attachedDeposit: parseNearAmount("0.1"),
+    });
 
-    return context.json({ success: true });
+    return context.json({ success: true, userIdHash: userIdHash });
   } catch (error) {
-    console.error("Error in /add-session-key:", error.stack || error);
+    console.error("Error in /verify-id-token:", error.stack || error);
     return context.json({ error: error.message }, 500);
   }
 });
 
+// **Add an OPTIONS handler for `/sign-txn`**
+app.options("/sign-txn", async (context) => {
+  // Set CORS headers for any origin
+  context.res.headers.set("Access-Control-Allow-Origin", "*");
+  context.res.headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  context.res.headers.set("Access-Control-Allow-Headers", "Content-Type");
+
+  return new Response(null, {
+    status: 204,
+    headers: context.res.headers,
+  });
+});
+
+// `/sign-txn` endpoint with open CORS
 app.post("/sign-txn", async (context) => {
-  const env = context.env;
+  // Set CORS headers for any origin
+  context.res.headers.set("Access-Control-Allow-Origin", "*");
+  context.res.headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  context.res.headers.set("Access-Control-Allow-Headers", "Content-Type");
 
   try {
     const { req } = context;
@@ -114,7 +150,10 @@ app.post("/sign-txn", async (context) => {
     const { signature, payload, sessionKey } = body;
 
     if (!signature || !payload || !sessionKey) {
-      return context.json({ error: "Missing signature, payload, or " }, 400);
+      return context.json(
+        { error: "Missing signature, payload, or sessionKey" },
+        400,
+      );
     }
 
     // Verify the signature using the session key
@@ -128,11 +167,11 @@ app.post("/sign-txn", async (context) => {
       return context.json({ error: "Invalid signature" }, 400);
     }
 
-    // Reconstruct the transaction
     // Use the account to call the contract method
-    const { near, account } = await setupNear(env);
+    const { near, account } = await setupNear(context.env);
 
-    const FASTAUTH_CONTRACT_ID = env.FASTAUTH_CONTRACT_ID;
+    const FASTAUTH_CONTRACT_ID = context.env.FASTAUTH_CONTRACT_ID;
+
     // Prepare function call
     const result = await contractCall({
       near,
@@ -150,7 +189,7 @@ app.post("/sign-txn", async (context) => {
 
     return context.json({ success: true, executionOutcome: result });
   } catch (error) {
-    console.error("Error in /sign-transaction:", error.stack || error);
+    console.error("Error in /sign-txn:", error.stack || error);
     return context.json({ error: error.message }, 500);
   }
 });
