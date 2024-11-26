@@ -125,3 +125,13 @@ const pollTransactionStatus = async (provider, transactionHash) => {
 };
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Add a helper function to extract deposit amount from the payload
+export function extractDepositFromPayload(payload) {
+  if (payload?.action?.FunctionCall) {
+    return BigInt(payload.action.FunctionCall.deposit || 0);
+  } else if (payload?.action?.Transfer) {
+    return BigInt(payload.action.Transfer.amount || 0);
+  }
+  return BigInt(0);
+}

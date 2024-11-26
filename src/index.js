@@ -2,7 +2,11 @@ import { Hono } from "hono";
 import { KeyPair } from "@near-js/crypto";
 import { parseNearAmount } from "@near-js/utils";
 import { deriveEthAddressFromMpcKey } from "./utils/mpc";
-import { contractCall, setupNear } from "./utils/near";
+import {
+  contractCall,
+  extractDepositFromPayload,
+  setupNear,
+} from "./utils/near";
 import { userIdFromAuth, verifyIdToken } from "./utils/auth";
 
 const app = new Hono();
@@ -49,7 +53,8 @@ app.post("/verify-id-token", async (context) => {
     const { req } = context;
     const body = await req.json();
 
-    const { idToken, sessionPublicKey } = body;
+    const { idToken, sessionPublicKey, appId } = body;
+    console.log("appId:", appId);
 
     if (!idToken || !sessionPublicKey) {
       return context.json(
@@ -111,6 +116,7 @@ app.post("/verify-id-token", async (context) => {
       args: {
         path,
         public_key: sessionPublicKey,
+        app_id: appId,
       },
       gas: "30000000000000",
       attachedDeposit: parseNearAmount("0.1"),
@@ -147,7 +153,8 @@ app.post("/sign-txn", async (context) => {
     const { req } = context;
     const body = await req.json();
 
-    const { signature, payload, sessionKey } = body;
+    const { signature, payload, sessionKey, appId } = body;
+    console.log("appId:", appId);
 
     if (!signature || !payload || !sessionKey) {
       return context.json(
@@ -171,20 +178,28 @@ app.post("/sign-txn", async (context) => {
     const { near, account } = await setupNear(context.env);
 
     const FASTAUTH_CONTRACT_ID = context.env.FASTAUTH_CONTRACT_ID;
+    const SHOULD_COVER_DEPOSITS = context.env.SHOULD_COVER_DEPOSITS;
+
+    // Determine the attached deposit
+    let attachedDeposit = BigInt(0);
+    if (SHOULD_COVER_DEPOSITS) {
+      attachedDeposit = extractDepositFromPayload(payload);
+    }
 
     // Prepare function call
     const result = await contractCall({
       near,
       account,
       contractId: FASTAUTH_CONTRACT_ID,
-      methodName: "call_near_contract",
+      methodName: "execute_near_action",
       args: {
         signature,
         payload,
         session_key: sessionKeyPair.getPublicKey().toString(),
+        app_id: appId,
       },
       gas: BigInt("300000000000000"),
-      attachedDeposit: BigInt(0),
+      attachedDeposit,
     });
 
     return context.json({ success: true, executionOutcome: result });
