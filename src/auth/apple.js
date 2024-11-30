@@ -1,24 +1,29 @@
-import { parseJwt, hashUserId } from "../utils/crypto";
+import { SignJWT } from "jose";
+import { parseJwt, hashUserId, validatePemPrivateKey } from "../utils/crypto";
 
 export async function verifyAppleToken(code, env) {
   const { APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_PRIVATE_KEY, APPLE_KEY_ID } =
     env;
 
-  // Create the client secret JWT
-  const clientSecret = jwt.sign(
-    {
-      iss: APPLE_TEAM_ID,
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600,
-      aud: "https://appleid.apple.com",
-      sub: APPLE_CLIENT_ID,
-    },
-    APPLE_PRIVATE_KEY,
-    {
-      algorithm: "ES256",
-      keyid: APPLE_KEY_ID,
-    },
-  );
+  const privateKey = APPLE_PRIVATE_KEY.replace(/\\n/g, "\n");
+
+  // Validate the private key format
+  validatePemPrivateKey(privateKey);
+
+  // Import the private key using jose
+  const privateKeyObj = await importPKCS8(privateKey);
+
+  // Create the client secret JWT using jose
+  const clientSecret = await new SignJWT({
+    iss: APPLE_TEAM_ID,
+    aud: "https://appleid.apple.com",
+    sub: APPLE_CLIENT_ID,
+  })
+    .setProtectedHeader({ alg: "ES256", kid: APPLE_KEY_ID })
+    .setIssuedAt()
+    .setExpirationTime("1h")
+    .sign(privateKeyObj);
+  console.log(clientSecret);
 
   // Exchange authorization code for tokens
   const tokenResponse = await fetch("https://appleid.apple.com/auth/token", {
@@ -33,8 +38,11 @@ export async function verifyAppleToken(code, env) {
       grant_type: "authorization_code",
     }),
   });
+  console.log("Code", code);
+  console.log("tokenResponse", JSON.stringify(tokenResponse));
 
   const tokenData = await tokenResponse.json();
+  console.log("tokenData", tokenData);
 
   if (!tokenData.id_token) {
     throw new Error("No ID token received from Apple");
@@ -47,6 +55,32 @@ export async function verifyAppleToken(code, env) {
   );
 
   return { userIdHash };
+}
+
+// Add the validatePrivateKey function as shown earlier
+
+async function importPKCS8(pem) {
+  const pemContents = pem.trim();
+  const binaryDerString = atob(
+    pemContents
+      .replace("-----BEGIN PRIVATE KEY-----", "")
+      .replace("-----END PRIVATE KEY-----", "")
+      .replace(/\n/g, ""),
+  );
+  const binaryDer = new Uint8Array(binaryDerString.length);
+  for (let i = 0; i < binaryDerString.length; i++) {
+    binaryDer[i] = binaryDerString.charCodeAt(i);
+  }
+  return await crypto.subtle.importKey(
+    "pkcs8",
+    binaryDer.buffer,
+    {
+      name: "ECDSA",
+      namedCurve: "P-256",
+    },
+    true,
+    ["sign"],
+  );
 }
 
 async function verifyAppleIdToken(idToken, clientId) {

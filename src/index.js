@@ -275,7 +275,7 @@ app.get("/oauth/apple", async (context) => {
   );
 
   const redirectUri = `${env.AUTH_ORIGIN}/oauth/callback`;
-  const oauthUrl = `https://appleid.apple.com/auth/authorize?response_type=code&client_id=${encodeURIComponent(
+  const oauthUrl = `https://appleid.apple.com/auth/authorize?response_type=code&response_mode=form_post&client_id=${encodeURIComponent(
     env.APPLE_CLIENT_ID,
   )}&redirect_uri=${encodeURIComponent(
     redirectUri,
@@ -357,6 +357,86 @@ app.get("/oauth/callback", async (context) => {
         window.opener.postMessage({ type: 'auth-error', error: '${err.message}' }, '*');
         window.close();
       </script>
+    `);
+  }
+});
+// OAuth Callback Handler for POST requests (Apple)
+app.post("/oauth/callback", async (context) => {
+  const { req, env } = context;
+  const form = await req.formData();
+  const code = form.get("code");
+  const state = form.get("state");
+  const error = form.get("error");
+
+  if (error) {
+    return context.html(`
+      <script>
+        window.opener.postMessage({ type: 'auth-error', error: '${error}' }, '*');
+        window.close();
+      </script>
+      <p>Authentication failed. You can close this window.</p>
+    `);
+  }
+
+  if (!code || !state) {
+    return context.html(`
+      <script>
+        window.opener.postMessage({ type: 'auth-error', error: 'Missing code or state.' }, '*');
+        window.close();
+      </script>
+      <p>Authentication failed. You can close this window.</p>
+    `);
+  }
+
+  try {
+    const sessionDataRaw = await env.SESSIONS.get(state);
+    if (!sessionDataRaw) {
+      throw new Error("Invalid or expired state parameter.");
+    }
+
+    const sessionData = JSON.parse(sessionDataRaw);
+    const { parentOrigin, publicKey, appId, provider } = sessionData;
+
+    await env.SESSIONS.delete(state);
+
+    let userIdHash;
+
+    if (provider === "google") {
+      const { userIdHash: googleUserIdHash } = await verifyGoogleToken(
+        code,
+        env,
+      );
+      userIdHash = googleUserIdHash;
+    } else if (provider === "discord") {
+      const { userIdHash: discordUserIdHash } = await verifyDiscordToken(
+        code,
+        env,
+      );
+      userIdHash = discordUserIdHash;
+    } else if (provider === "apple") {
+      const { userIdHash: appleUserIdHash } = await verifyAppleToken(code, env);
+      userIdHash = appleUserIdHash;
+    } else {
+      throw new Error("Unsupported provider.");
+    }
+
+    await addSessionKey(env, userIdHash, publicKey, appId);
+
+    return context.html(`
+      <script>
+        window.opener.postMessage({ type: 'auth-success', userIdHash: '${userIdHash}' }, '${parentOrigin}');
+        window.close();
+      </script>
+      <p>Authentication successful. You can close this window.</p>
+    `);
+  } catch (err) {
+    console.error("Error in /oauth/callback (POST):", err.stack || err);
+    return context.html(`
+      <script>
+        window.opener.postMessage({ type: 'auth-error', error: '${err.message}' }, '*');
+        window.close();
+      </script>
+      <p>Authentication failed. You can close this window.</p>
     `);
   }
 });
