@@ -5,20 +5,9 @@
   "type": "module",
   "description": "A template for using stripe-node in a Cloudflare Worker",
   "scripts": {
-    "dev": "wrangler dev src/index.js --env dev",
-    "ping:healthcheck": "node ./healthCheck.js",
-    "ping:agenda:dev": "node ./ping.js agenda dev",
-    "ping:agenda:prod": "node ./ping.js agenda production",
-    "ping:agenda:local": "node ./ping.js agenda local",
-    "ping:alerts:dev": "node ./ping.js alerts dev",
-    "ping:alerts:prod": "node ./ping.js alerts production",
-    "ping:alerts:local": "node ./ping.js alerts local",
-    "ping:webhooks:dev": "./viewWebhookStatus.sh dev",
-    "ping:webhooks:prod": "./viewWebhookStatus.sh production",
-    "deploy:dev": "./deploy.sh dev",
-    "deploy:prod": "./deploy.sh production",
-    "create:webhook:dev": "./cycleWebhook.sh dev",
-    "create:webhook:prod": "./cycleWebhook.sh production"
+    "deploy:local": "./deploy.sh local",
+    "deploy:dev": "./deploy.sh development",
+    "deploy:prod": "./deploy.sh production"
   },
   "author": "{{ authors }}",
   "license": "MIT",
@@ -32,7 +21,6 @@
     "@near-js/types": "0.0.4",
     "@near-js/utils": "0.0.4",
     "@near-js/wallet-account": "0.0.6",
-    "airtable": "^0.12.2",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
     "dotenv": "^16.4.5",
@@ -41,7 +29,10 @@
     "events-polyfill": "^2.1.2",
     "helia": "^4.0.1",
     "hono": "^4.5.9",
-    "libp2p": "^1.3.1"
+    "jsonwebtoken": "^9.0.2",
+    "jwk-to-pem": "^2.0.7",
+    "libp2p": "^1.3.1",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240821.1",

@@ -2,6 +2,8 @@
 dist
 .parcel-cache
 .dev.vars
+.env/*.secret.vars
+/env/*
 
 # dependencies
 /node_modules
@@ -16,6 +18,10 @@ dist
 .env.production
 .prod.vars
 .DS_Store
+.env.development
+.local.vars
+wrangler.toml.backup
+.wrangler/
 .env.local
 .env.development.local
 .env.test.local

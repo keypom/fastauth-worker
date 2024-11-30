@@ -11,16 +11,38 @@ enabled = true
 [env.production.vars]
 ENVIRONMENT='development'
 NETWORK='testnet'
-FIREWALL='FALSE'
-FASTAUTH_CONTRACT_ID='1732136407269-fastauth.testnet'
-
-[env.dev]
-[env.dev.vars]
-ENVIRONMENT='development'
-NETWORK='testnet'
-FIREWALL='FALSE'
 FASTAUTH_CONTRACT_ID='1732654372972-fastauth.testnet'
 ORACLE_ACCOUNT_ID='fastauth-oracle-1.testnet'
 MPC_CONTRACT_ID='v1.signer-prod.testnet'
-AUTH_ORIGIN='http://localhost:3001'
+AUTH_ORIGIN='https://auth.keypom.xyz'
 SHOULD_COVER_DEPOSITS='TRUE'
+
+[env.development]
+[env.development.vars]
+ENVIRONMENT='development'
+NETWORK='testnet'
+FASTAUTH_CONTRACT_ID='1732654372972-fastauth.testnet'
+ORACLE_ACCOUNT_ID='fastauth-oracle-1.testnet'
+MPC_CONTRACT_ID='v1.signer-prod.testnet'
+AUTH_ORIGIN='https://fastauth-worker-development.keypom.workers.dev'
+SHOULD_COVER_DEPOSITS='TRUE'
+DISCORD_CLIENT_ID='1311715486920347811'
+GOOGLE_CLIENT_ID='628474345367-00e4u0e95em1hv9idh9lkh1cqve3iv5l.apps.googleusercontent.com'
+[[env.development.kv_namespaces]]
+binding = "SESSIONS"
+id = "6d6f72263bf04841b60e5ba0ffbe93ae"  # Replace with your dev KV namespace ID
+
+[env.local]
+[env.local.vars]
+ENVIRONMENT='local'
+NETWORK='testnet'
+FASTAUTH_CONTRACT_ID='1732654372972-fastauth.testnet'
+ORACLE_ACCOUNT_ID='fastauth-oracle-1.testnet'
+MPC_CONTRACT_ID='v1.signer-prod.testnet'
+AUTH_ORIGIN='http://localhost:8787'
+SHOULD_COVER_DEPOSITS='TRUE'
+DISCORD_CLIENT_ID='1311762429893677107'
+GOOGLE_CLIENT_ID='628474345367-oelrf7ptm9hatvcbtj66e8ao73pdfvdf.apps.googleusercontent.com'
+[[env.local.kv_namespaces]]
+binding = "SESSIONS"
+id = "03727e09e2a6428f9f648e6cf162e32b"

@@ -1,20 +1,20 @@
 import { Hono } from "hono";
 import { KeyPair } from "@near-js/crypto";
-import { parseNearAmount } from "@near-js/utils";
-import { deriveEthAddressFromMpcKey } from "./utils/mpc";
 import {
   contractCall,
   extractDepositFromPayload,
   setupNear,
 } from "./utils/near";
-import { userIdFromAuth, verifyIdToken } from "./utils/auth";
+import { addSessionKey } from "./contract/helpers";
+import { verifyGoogleToken } from "./auth/google";
+import { verifyDiscordToken } from "./auth/discord"; // New import
 
 const app = new Hono();
 
-// CORS middleware for `/verify-id-token` only
+// CORS middleware for `/verify-google-token` and `/verify-discord-token`
 const corsMiddleware = async (context, next) => {
   const env = context.env;
-  const authOrigin = env.AUTH_ORIGIN;
+  const authOrigin = env.AUTH_ORIGIN; // Frontend origin
   const requestOrigin = context.req.header("Origin");
 
   if (requestOrigin === authOrigin) {
@@ -37,10 +37,22 @@ const corsMiddleware = async (context, next) => {
   await next();
 };
 
-// `/verify-id-token` with CORS
-app.use("/verify-id-token", corsMiddleware);
+// Apply CORS middleware to verification endpoints
+app.use("/verify-google-token", corsMiddleware);
+app.use("/verify-discord-token", corsMiddleware);
 
-app.post("/verify-id-token", async (context) => {
+app.options("/sign-txn", async (context) => {
+  console.log("Received preflight request for /sign-txn");
+  context.res.headers.set("Access-Control-Allow-Origin", "*");
+  context.res.headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  context.res.headers.set("Access-Control-Allow-Headers", "Content-Type");
+  return new Response(null, {
+    status: 204,
+    headers: context.res.headers,
+  });
+});
+
+app.post("/verify-google-token", async (context) => {
   const env = context.env;
   const authOrigin = env.AUTH_ORIGIN;
 
@@ -65,81 +77,226 @@ app.post("/verify-id-token", async (context) => {
 
     // Verify the ID token
     const clientId = env.GOOGLE_CLIENT_ID;
-    const payload = await verifyIdToken(idToken, clientId);
-    const userIdHash = await userIdFromAuth(payload);
+    const { userIdHash } = await verifyGoogleToken(idToken, clientId);
 
-    // Now call the NEAR contract's add_session_key method
-    const { account } = await setupNear(env);
-
-    const FASTAUTH_CONTRACT_ID = env.FASTAUTH_CONTRACT_ID;
-    const MPC_CONTRACT_ID = env.MPC_CONTRACT_ID;
-
-    // Check if the user has a bundle; if not, activate the account
-    const path = userIdHash;
-    let userBundle = await account.viewFunction({
-      contractId: FASTAUTH_CONTRACT_ID,
-      methodName: "get_bundle",
-      args: {
-        path,
-      },
-    });
-
-    if (!userBundle) {
-      const mpcKey = await account.viewFunction({
-        contractId: MPC_CONTRACT_ID,
-        methodName: "derived_public_key",
-        args: {
-          path,
-          predecessor: FASTAUTH_CONTRACT_ID,
-        },
-      });
-
-      const ethImplicitAccountId = deriveEthAddressFromMpcKey(mpcKey);
-
-      await account.functionCall({
-        contractId: FASTAUTH_CONTRACT_ID,
-        methodName: "activate_account",
-        args: {
-          mpc_key: mpcKey,
-          eth_address: ethImplicitAccountId,
-          path,
-        },
-        gas: "30000000000000",
-        attachedDeposit: parseNearAmount("0.1"),
-      });
-    }
-
-    // Add the session key
-    await account.functionCall({
-      contractId: FASTAUTH_CONTRACT_ID,
-      methodName: "add_session_key",
-      args: {
-        path,
-        public_key: sessionPublicKey,
-        app_id: appId,
-      },
-      gas: "30000000000000",
-      attachedDeposit: parseNearAmount("0.1"),
-    });
+    // Add session key to smart contract
+    await addSessionKey(env, userIdHash, sessionPublicKey, appId);
 
     return context.json({ success: true, userIdHash: userIdHash });
   } catch (error) {
-    console.error("Error in /verify-id-token:", error.stack || error);
+    console.error("Error in /verify-google-token:", error.stack || error);
     return context.json({ error: error.message }, 500);
   }
 });
 
-// **Add an OPTIONS handler for `/sign-txn`**
-app.options("/sign-txn", async (context) => {
-  // Set CORS headers for any origin
-  context.res.headers.set("Access-Control-Allow-Origin", "*");
-  context.res.headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  context.res.headers.set("Access-Control-Allow-Headers", "Content-Type");
+app.post("/verify-discord-token", async (context) => {
+  // Similar implementation as verify-google-token
+  const env = context.env;
+  const authOrigin = env.AUTH_ORIGIN;
 
-  return new Response(null, {
-    status: 204,
-    headers: context.res.headers,
-  });
+  const requestOrigin = context.req.header("Origin");
+  if (requestOrigin !== authOrigin) {
+    return context.json({ error: "Unauthorized" }, 403);
+  }
+
+  try {
+    const { req } = context;
+    const body = await req.json();
+
+    const { code, sessionPublicKey, appId } = body;
+    console.log("appId:", appId);
+
+    if (!code || !sessionPublicKey || !appId) {
+      return context.json(
+        { error: "Missing code, sessionPublicKey, or appId" },
+        400,
+      );
+    }
+
+    // Verify the authorization code with Discord
+    const { userIdHash } = await verifyDiscordToken(code, env);
+
+    // Add session key to smart contract
+    await addSessionKey(env, userIdHash, sessionPublicKey, appId);
+
+    return context.json({ success: true, userIdHash: userIdHash });
+  } catch (error) {
+    console.error("Error in /verify-discord-token:", error.stack || error);
+    return context.json({ error: error.message }, 500);
+  }
+});
+
+// OAuth Initiation for Google
+app.get("/oauth/google", async (context) => {
+  const { req, env } = context;
+  const url = new URL(req.url);
+  const parentOrigin = url.searchParams.get("parentOrigin");
+  const publicKey = url.searchParams.get("publicKey");
+  const appId = url.searchParams.get("appId");
+
+  if (!parentOrigin || !publicKey || !appId) {
+    return context.json(
+      { error: "Missing parentOrigin, publicKey, or appId" },
+      400,
+    );
+  }
+
+  // Generate a unique state parameter
+  const state = crypto.randomUUID();
+
+  // Store the state mapping in Workers KV
+  await env.SESSIONS.put(
+    state,
+    JSON.stringify({
+      parentOrigin,
+      publicKey,
+      appId,
+      provider: "google",
+    }),
+    { expirationTtl: 600 }, // 10 minutes
+  );
+
+  // Construct the OAuth authorization URL for Google
+  const redirectUri = `${env.AUTH_ORIGIN}/oauth/callback`;
+  const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=${encodeURIComponent(
+    env.GOOGLE_CLIENT_ID,
+  )}&redirect_uri=${encodeURIComponent(
+    redirectUri,
+  )}&scope=openid%20email%20profile&state=${encodeURIComponent(state)}`;
+
+  // Redirect to Google's OAuth 2.0 server
+  return context.redirect(oauthUrl);
+});
+
+// OAuth Initiation for Discord
+app.get("/oauth/discord", async (context) => {
+  const { req, env } = context;
+  const url = new URL(req.url);
+  const parentOrigin = url.searchParams.get("parentOrigin");
+  const publicKey = url.searchParams.get("publicKey");
+  const appId = url.searchParams.get("appId");
+
+  if (!parentOrigin || !publicKey || !appId) {
+    return context.json(
+      { error: "Missing parentOrigin, publicKey, or appId" },
+      400,
+    );
+  }
+
+  // Generate a unique state parameter
+  const state = crypto.randomUUID();
+
+  // Store the state mapping in Workers KV
+  await env.SESSIONS.put(
+    state,
+    JSON.stringify({
+      parentOrigin,
+      publicKey,
+      appId,
+      provider: "discord",
+    }),
+    { expirationTtl: 600 }, // 10 minutes
+  );
+
+  // Construct the OAuth authorization URL for Discord
+  const redirectUri = `${env.AUTH_ORIGIN}/oauth/callback`;
+  const oauthUrl = `https://discord.com/api/oauth2/authorize?response_type=code&client_id=${encodeURIComponent(
+    env.DISCORD_CLIENT_ID,
+  )}&redirect_uri=${encodeURIComponent(
+    redirectUri,
+  )}&scope=identify%20email&state=${encodeURIComponent(state)}`;
+
+  // Redirect to Discord's OAuth 2.0 server
+  return context.redirect(oauthUrl);
+});
+
+// OAuth Callback Handler
+app.get("/oauth/callback", async (context) => {
+  const { req, env } = context;
+  const url = new URL(req.url);
+  console.log("url:", url);
+  const code = url.searchParams.get("code");
+  console.log("code:", code);
+  const state = url.searchParams.get("state");
+  console.log("state:", state);
+  const error = url.searchParams.get("error");
+  console.log("error:", error);
+
+  if (error) {
+    // Handle OAuth provider errors
+    return context.html(`
+      <script>
+        window.opener.postMessage({ type: 'auth-error', error: '${error}' }, '*');
+        window.close();
+      </script>
+      <p>Authentication failed. You can close this window.</p>
+    `);
+  }
+
+  if (!code || !state) {
+    return context.html(`
+      <script>
+        window.opener.postMessage({ type: 'auth-error', error: 'Missing code or state.' }, '*');
+        window.close();
+      </script>
+      <p>Authentication failed. You can close this window.</p>
+    `);
+  }
+
+  try {
+    // Retrieve the state mapping from Workers KV
+    const sessionDataRaw = await env.SESSIONS.get(state);
+    if (!sessionDataRaw) {
+      throw new Error("Invalid or expired state parameter.");
+    }
+
+    const sessionData = JSON.parse(sessionDataRaw);
+    const { parentOrigin, publicKey, appId, provider } = sessionData;
+
+    // Remove the state from KV to prevent reuse
+    await env.SESSIONS.delete(state);
+
+    let userIdHash;
+
+    if (provider === "google") {
+      // Verify Google token
+      const { userIdHash: googleUserIdHash } = await verifyGoogleToken(
+        code,
+        env,
+      );
+      userIdHash = googleUserIdHash;
+    } else if (provider === "discord") {
+      // Verify Discord token
+      const { userIdHash: discordUserIdHash } = await verifyDiscordToken(
+        code,
+        env,
+      );
+      userIdHash = discordUserIdHash;
+    } else {
+      throw new Error("Unsupported provider.");
+    }
+
+    // Add session key to smart contract
+    await addSessionKey(env, userIdHash, publicKey, appId);
+
+    // Respond with an HTML page that sends a postMessage to the parent window
+    return context.html(`
+      <script>
+        window.opener.postMessage({ type: 'auth-success', userIdHash: '${userIdHash}' }, '${parentOrigin}');
+        window.close();
+      </script>
+      <p>Authentication successful. You can close this window.</p>
+    `);
+  } catch (err) {
+    console.error("Error in /oauth/callback:", err.stack || err);
+    return context.html(`
+      <script>
+        window.opener.postMessage({ type: 'auth-error', error: '${err.message}' }, '*');
+        window.close();
+      </script>
+      <p>Authentication failed. You can close this window.</p>
+    `);
+  }
 });
 
 // `/sign-txn` endpoint with open CORS
