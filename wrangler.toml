@@ -28,6 +28,9 @@ AUTH_ORIGIN='https://fastauth-worker-development.keypom.workers.dev'
 SHOULD_COVER_DEPOSITS='TRUE'
 DISCORD_CLIENT_ID='1311715486920347811'
 GOOGLE_CLIENT_ID='628474345367-00e4u0e95em1hv9idh9lkh1cqve3iv5l.apps.googleusercontent.com'
+APPLE_KEY_ID='37H84G7JPL'
+APPLE_TEAM_ID='H33JXR3PRG'
+APPLE_CLIENT_ID='com.fastauth.service'
 [[env.development.kv_namespaces]]
 binding = "SESSIONS"
 id = "6d6f72263bf04841b60e5ba0ffbe93ae"  # Replace with your dev KV namespace ID

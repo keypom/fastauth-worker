@@ -7,7 +7,8 @@ import {
 } from "./utils/near";
 import { addSessionKey } from "./contract/helpers";
 import { verifyGoogleToken } from "./auth/google";
-import { verifyDiscordToken } from "./auth/discord"; // New import
+import { verifyDiscordToken } from "./auth/discord";
+import { verifyAppleToken } from "./auth/apple";
 
 const app = new Hono();
 
@@ -40,6 +41,7 @@ const corsMiddleware = async (context, next) => {
 // Apply CORS middleware to verification endpoints
 app.use("/verify-google-token", corsMiddleware);
 app.use("/verify-discord-token", corsMiddleware);
+app.use("/verify-apple-token", corsMiddleware);
 
 app.options("/sign-txn", async (context) => {
   console.log("Received preflight request for /sign-txn");
@@ -122,6 +124,40 @@ app.post("/verify-discord-token", async (context) => {
     return context.json({ success: true, userIdHash: userIdHash });
   } catch (error) {
     console.error("Error in /verify-discord-token:", error.stack || error);
+    return context.json({ error: error.message }, 500);
+  }
+});
+
+// Apple token verification
+app.post("/verify-apple-token", async (context) => {
+  const env = context.env;
+  const authOrigin = env.AUTH_ORIGIN;
+
+  const requestOrigin = context.req.header("Origin");
+  if (requestOrigin !== authOrigin) {
+    return context.json({ error: "Unauthorized" }, 403);
+  }
+
+  try {
+    const { req } = context;
+    const body = await req.json();
+
+    const { code, sessionPublicKey, appId } = body;
+
+    if (!code || !sessionPublicKey || !appId) {
+      return context.json(
+        { error: "Missing code, sessionPublicKey, or appId" },
+        400,
+      );
+    }
+
+    const { userIdHash } = await verifyAppleToken(code, env);
+
+    await addSessionKey(env, userIdHash, sessionPublicKey, appId);
+
+    return context.json({ success: true, userIdHash });
+  } catch (error) {
+    console.error("Error in /verify-apple-token:", error.stack || error);
     return context.json({ error: error.message }, 500);
   }
 });
@@ -210,20 +246,129 @@ app.get("/oauth/discord", async (context) => {
   return context.redirect(oauthUrl);
 });
 
-// OAuth Callback Handler
+// OAuth Initiation for Apple
+app.get("/oauth/apple", async (context) => {
+  const { req, env } = context;
+  const url = new URL(req.url);
+  const parentOrigin = url.searchParams.get("parentOrigin");
+  const publicKey = url.searchParams.get("publicKey");
+  const appId = url.searchParams.get("appId");
+
+  if (!parentOrigin || !publicKey || !appId) {
+    return context.json(
+      { error: "Missing parentOrigin, publicKey, or appId" },
+      400,
+    );
+  }
+
+  const state = crypto.randomUUID();
+
+  await env.SESSIONS.put(
+    state,
+    JSON.stringify({
+      parentOrigin,
+      publicKey,
+      appId,
+      provider: "apple",
+    }),
+    { expirationTtl: 600 },
+  );
+
+  const redirectUri = `${env.AUTH_ORIGIN}/oauth/callback`;
+  const oauthUrl = `https://appleid.apple.com/auth/authorize?response_type=code&response_mode=form_post&client_id=${encodeURIComponent(
+    env.APPLE_CLIENT_ID,
+  )}&redirect_uri=${encodeURIComponent(
+    redirectUri,
+  )}&state=${encodeURIComponent(state)}&scope=email`;
+
+  return context.redirect(oauthUrl);
+});
+
+// OAuth Callback Handler (updated for Apple)
 app.get("/oauth/callback", async (context) => {
   const { req, env } = context;
   const url = new URL(req.url);
-  console.log("url:", url);
   const code = url.searchParams.get("code");
-  console.log("code:", code);
   const state = url.searchParams.get("state");
-  console.log("state:", state);
   const error = url.searchParams.get("error");
-  console.log("error:", error);
 
   if (error) {
-    // Handle OAuth provider errors
+    return context.html(`
+      <script>
+        window.opener.postMessage({ type: 'auth-error', error: '${error}' }, '*');
+        window.close();
+      </script>
+    `);
+  }
+
+  if (!code || !state) {
+    return context.html(`
+      <script>
+        window.opener.postMessage({ type: 'auth-error', error: 'Missing code or state.' }, '*');
+        window.close();
+      </script>
+    `);
+  }
+
+  try {
+    const sessionDataRaw = await env.SESSIONS.get(state);
+    if (!sessionDataRaw) {
+      throw new Error("Invalid or expired state parameter.");
+    }
+
+    const sessionData = JSON.parse(sessionDataRaw);
+    const { parentOrigin, publicKey, appId, provider } = sessionData;
+
+    await env.SESSIONS.delete(state);
+
+    let userIdHash;
+
+    if (provider === "google") {
+      const { userIdHash: googleUserIdHash } = await verifyGoogleToken(
+        code,
+        env,
+      );
+      userIdHash = googleUserIdHash;
+    } else if (provider === "discord") {
+      const { userIdHash: discordUserIdHash } = await verifyDiscordToken(
+        code,
+        env,
+      );
+      userIdHash = discordUserIdHash;
+    } else if (provider === "apple") {
+      const { userIdHash: appleUserIdHash } = await verifyAppleToken(code, env);
+      userIdHash = appleUserIdHash;
+    } else {
+      throw new Error("Unsupported provider.");
+    }
+
+    await addSessionKey(env, userIdHash, publicKey, appId);
+
+    return context.html(`
+      <script>
+        window.opener.postMessage({ type: 'auth-success', userIdHash: '${userIdHash}' }, '${parentOrigin}');
+        window.close();
+      </script>
+    `);
+  } catch (err) {
+    console.error("Error in /oauth/callback:", err);
+    return context.html(`
+      <script>
+        window.opener.postMessage({ type: 'auth-error', error: '${err.message}' }, '*');
+        window.close();
+      </script>
+    `);
+  }
+});
+// OAuth Callback Handler for POST requests (Apple)
+app.post("/oauth/callback", async (context) => {
+  const { req, env } = context;
+  const form = await req.formData();
+  const code = form.get("code");
+  const state = form.get("state");
+  const error = form.get("error");
+
+  if (error) {
     return context.html(`
       <script>
         window.opener.postMessage({ type: 'auth-error', error: '${error}' }, '*');
@@ -244,7 +389,6 @@ app.get("/oauth/callback", async (context) => {
   }
 
   try {
-    // Retrieve the state mapping from Workers KV
     const sessionDataRaw = await env.SESSIONS.get(state);
     if (!sessionDataRaw) {
       throw new Error("Invalid or expired state parameter.");
@@ -253,33 +397,31 @@ app.get("/oauth/callback", async (context) => {
     const sessionData = JSON.parse(sessionDataRaw);
     const { parentOrigin, publicKey, appId, provider } = sessionData;
 
-    // Remove the state from KV to prevent reuse
     await env.SESSIONS.delete(state);
 
     let userIdHash;
 
     if (provider === "google") {
-      // Verify Google token
       const { userIdHash: googleUserIdHash } = await verifyGoogleToken(
         code,
         env,
       );
       userIdHash = googleUserIdHash;
     } else if (provider === "discord") {
-      // Verify Discord token
       const { userIdHash: discordUserIdHash } = await verifyDiscordToken(
         code,
         env,
       );
       userIdHash = discordUserIdHash;
+    } else if (provider === "apple") {
+      const { userIdHash: appleUserIdHash } = await verifyAppleToken(code, env);
+      userIdHash = appleUserIdHash;
     } else {
       throw new Error("Unsupported provider.");
     }
 
-    // Add session key to smart contract
     await addSessionKey(env, userIdHash, publicKey, appId);
 
-    // Respond with an HTML page that sends a postMessage to the parent window
     return context.html(`
       <script>
         window.opener.postMessage({ type: 'auth-success', userIdHash: '${userIdHash}' }, '${parentOrigin}');
@@ -288,7 +430,7 @@ app.get("/oauth/callback", async (context) => {
       <p>Authentication successful. You can close this window.</p>
     `);
   } catch (err) {
-    console.error("Error in /oauth/callback:", err.stack || err);
+    console.error("Error in /oauth/callback (POST):", err.stack || err);
     return context.html(`
       <script>
         window.opener.postMessage({ type: 'auth-error', error: '${err.message}' }, '*');

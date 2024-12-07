@@ -33,3 +33,14 @@ export function parseJwt(token) {
     throw new Error("Failed to parse JWT");
   }
 }
+
+export function validatePemPrivateKey(pem) {
+  const pemLines = pem.split("\n");
+  if (
+    pemLines[0] !== "-----BEGIN PRIVATE KEY-----" ||
+    pemLines[pemLines.length - 1] !== "-----END PRIVATE KEY-----"
+  ) {
+    throw new Error("Invalid PEM format for APPLE_PRIVATE_KEY");
+  }
+  // Optionally, check the number of lines or length
+}
